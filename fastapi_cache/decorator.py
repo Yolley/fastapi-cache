@@ -1,22 +1,12 @@
 import logging
-import sys
+from collections.abc import Awaitable, Callable
 from functools import wraps
 from inspect import Parameter, Signature, isawaitable, iscoroutinefunction
 from typing import (
-    Awaitable,
-    Callable,
-    List,
-    Optional,
-    Type,
+    ParamSpec,
     TypeVar,
-    Union,
     cast,
 )
-
-if sys.version_info >= (3, 10):
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
 
 from fastapi.concurrency import run_in_threadpool
 from fastapi.dependencies.utils import (
@@ -42,15 +32,17 @@ def _augment_signature(signature: Signature, *extra: Parameter) -> Signature:
         return signature
 
     parameters = list(signature.parameters.values())
-    variadic_keyword_params: List[Parameter] = []
+    variadic_keyword_params: list[Parameter] = []
     while parameters and parameters[-1].kind is Parameter.VAR_KEYWORD:
         variadic_keyword_params.append(parameters.pop())
 
-    return signature.replace(parameters=[*parameters, *extra, *variadic_keyword_params])
+    return signature.replace(
+        parameters=[*parameters, *extra, *variadic_keyword_params]
+    )
 
 
 def _locate_param(
-    sig: Signature, dep: Parameter, to_inject: List[Parameter]
+    sig: Signature, dep: Parameter, to_inject: list[Parameter]
 ) -> Parameter:
     """Locate an existing parameter in the decorated endpoint
 
@@ -58,7 +50,8 @@ def _locate_param(
 
     """
     param = next(
-        (p for p in sig.parameters.values() if p.annotation is dep.annotation), None
+        (p for p in sig.parameters.values() if p.annotation is dep.annotation),
+        None,
     )
     if param is None:
         to_inject.append(dep)
@@ -66,7 +59,7 @@ def _locate_param(
     return param
 
 
-def _uncacheable(request: Optional[Request]) -> bool:
+def _uncacheable(request: Request | None) -> bool:
     """Determine if this request should not be cached
 
     Returns true if:
@@ -85,12 +78,14 @@ def _uncacheable(request: Optional[Request]) -> bool:
 
 
 def cache(
-    expire: Optional[int] = None,
-    coder: Optional[Type[Coder]] = None,
-    key_builder: Optional[KeyBuilder] = None,
+    expire: int | None = None,
+    coder: type[Coder] | None = None,
+    key_builder: KeyBuilder | None = None,
     namespace: str = "",
     injected_dependency_namespace: str = "__fastapi_cache",
-) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[Union[R, Response]]]]:
+) -> Callable[
+    [Callable[P, Awaitable[R]]], Callable[P, Awaitable[R | Response]]
+]:
     """
     cache all function
     :param namespace:
@@ -114,16 +109,20 @@ def cache(
 
     def wrapper(
         func: Callable[P, Awaitable[R]]
-    ) -> Callable[P, Awaitable[Union[R, Response]]]:
+    ) -> Callable[P, Awaitable[R | Response]]:
         # get_typed_signature ensures that any forward references are resolved first
         wrapped_signature = get_typed_signature(func)
-        to_inject: List[Parameter] = []
-        request_param = _locate_param(wrapped_signature, injected_request, to_inject)
-        response_param = _locate_param(wrapped_signature, injected_response, to_inject)
+        to_inject: list[Parameter] = []
+        request_param = _locate_param(
+            wrapped_signature, injected_request, to_inject
+        )
+        response_param = _locate_param(
+            wrapped_signature, injected_response, to_inject
+        )
         return_type = get_typed_return_annotation(func)
 
         @wraps(func)
-        async def inner(*args: P.args, **kwargs: P.kwargs) -> Union[R, Response]:
+        async def inner(*args: P.args, **kwargs: P.kwargs) -> R | Response:
             nonlocal coder
             nonlocal expire
             nonlocal key_builder
@@ -148,8 +147,10 @@ def cache(
                     return await run_in_threadpool(func, *args, **kwargs)  # type: ignore[arg-type]
 
             copy_kwargs = kwargs.copy()
-            request: Optional[Request] = copy_kwargs.pop(request_param.name, None)  # type: ignore[assignment]
-            response: Optional[Response] = copy_kwargs.pop(response_param.name, None)  # type: ignore[assignment]
+            request: Request | None = copy_kwargs.pop(request_param.name, None)  # type: ignore[assignment]
+            response: Response | None = copy_kwargs.pop(
+                response_param.name, None
+            )  # type: ignore[assignment]
 
             if _uncacheable(request):
                 return await ensure_async_func(*args, **kwargs)
@@ -203,25 +204,24 @@ def cache(
                         }
                     )
 
-            else:  # cache hit
-                if response:
-                    etag = f"W/{hash(cached)}"
-                    response.headers.update(
-                        {
-                            "Cache-Control": f"max-age={ttl}",
-                            "ETag": etag,
-                            cache_status_header: "HIT",
-                        }
-                    )
+                return result
 
-                    if_none_match = request and request.headers.get("if-none-match")
-                    if if_none_match == etag:
-                        response.status_code = HTTP_304_NOT_MODIFIED
-                        return response
+            if response:
+                etag = f"W/{hash(cached)}"
+                response.headers.update(
+                    {
+                        "Cache-Control": f"max-age={ttl}",
+                        "ETag": etag,
+                        cache_status_header: "HIT",
+                    }
+                )
 
-                result = cast(R, coder.decode_as_type(cached, type_=return_type))
+                if_none_match = request and request.headers.get("if-none-match")
+                if if_none_match == etag:
+                    response.status_code = HTTP_304_NOT_MODIFIED
+                    return response
 
-            return result
+            return cast(R, coder.decode_as_type(cached, type_=return_type))
 
         inner.__signature__ = _augment_signature(wrapped_signature, *to_inject)  # type: ignore[attr-defined]
 

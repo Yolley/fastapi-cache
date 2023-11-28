@@ -1,5 +1,7 @@
 # pyright: reportGeneralTypeIssues=false
-from typing import Dict, Optional
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 import pendulum
 import uvicorn
@@ -11,7 +13,14 @@ from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    FastAPICache.init(InMemoryBackend())
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 ret = 0
 
@@ -86,15 +95,19 @@ app.get("/method")(cache(namespace="test")(instance.handler_method))
 # cache a Pydantic model instance; the return type annotation is required in this case
 class Item(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     price: float
-    tax: Optional[float] = None
+    tax: float | None = None
 
 
 @app.get("/pydantic_instance")
 @cache(namespace="test", expire=5)
 async def pydantic_instance() -> Item:
-    return Item(name="Something", description="An instance of a Pydantic model", price=10.5)
+    return Item(
+        name="Something",
+        description="An instance of a Pydantic model",
+        price=10.5,
+    )
 
 
 put_ret = 0
@@ -112,16 +125,11 @@ async def uncached_put():
 @cache(namespace="test", expire=5, injected_dependency_namespace="monty_python")
 def namespaced_injection(
     __fastapi_cache_request: int = 42, __fastapi_cache_response: int = 17
-) -> Dict[str, int]:
+) -> dict[str, int]:
     return {
         "__fastapi_cache_request": __fastapi_cache_request,
         "__fastapi_cache_response": __fastapi_cache_response,
     }
-
-
-@app.on_event("startup")
-async def startup():
-    FastAPICache.init(InMemoryBackend())
 
 
 if __name__ == "__main__":

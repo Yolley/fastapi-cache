@@ -1,5 +1,7 @@
 # pyright: reportGeneralTypeIssues=false
 import time
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 import pendulum
 import uvicorn
@@ -17,7 +19,16 @@ from starlette.responses import JSONResponse, Response
 import redis.asyncio as redis
 from redis.asyncio.connection import ConnectionPool
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    pool = ConnectionPool.from_url(url="redis://localhost")
+    r = redis.Redis(connection_pool=pool)
+    FastAPICache.init(RedisBackend(r), prefix="fastapi-cache")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.mount(
     path="/static",
@@ -71,20 +82,15 @@ async def get_datetime(request: Request, response: Response):
 @app.get("/html", response_class=HTMLResponse)
 @cache(expire=60, namespace="html", coder=PickleCoder)
 async def cache_html(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "ret": await get_ret()})
+    return templates.TemplateResponse(
+        "index.html", {"request": request, "ret": await get_ret()}
+    )
 
 
 @app.get("/cache_response_obj")
 @cache(namespace="test", expire=5)
 async def cache_response_obj():
     return JSONResponse({"a": 1})
-
-
-@app.on_event("startup")
-async def startup():
-    pool = ConnectionPool.from_url(url="redis://redis")
-    r = redis.Redis(connection_pool=pool)
-    FastAPICache.init(RedisBackend(r), prefix="fastapi-cache")
 
 
 if __name__ == "__main__":
