@@ -1,8 +1,8 @@
 # fastapi-cache
 
 [![pypi](https://img.shields.io/pypi/v/fastapi-cache2.svg?style=flat)](https://pypi.org/p/fastapi-cache2)
-[![license](https://img.shields.io/github/license/long2ice/fastapi-cache)](https://github.com/long2ice/fastapi-cache/blob/main/LICENSE)
-[![CI/CD](https://github.com/long2ice/fastapi-cache/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/long2ice/fastapi-cache/actions/workflows/ci-cd.yml)
+[![license](https://img.shields.io/github/license/Yolley/fastapi-cache)](https://github.com/Yolley/fastapi-cache/blob/main/LICENSE)
+[![CI/CD](https://github.com/Yolley/fastapi-cache/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/Yolley/fastapi-cache/actions/workflows/ci-cd.yml)
 
 ## Introduction
 
@@ -51,6 +51,9 @@ or
 ### Quick Start
 
 ```python
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import Response
@@ -59,9 +62,18 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache.decorator import cache
 
-from redis import asyncio as aioredis
+import redis.asyncio as redis
+from redis.asyncio.connection import ConnectionPool
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    pool = ConnectionPool.from_url(url="redis://localhost")
+    r = redis.Redis(connection_pool=pool)
+    FastAPICache.init(RedisBackend(r), prefix="fastapi-cache")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @cache()
@@ -74,12 +86,6 @@ async def get_cache():
 async def index():
     return dict(hello="world")
 
-
-@app.on_event("startup")
-async def startup():
-    redis = aioredis.from_url("redis://localhost")
-    FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
-
 ```
 
 ### Initialization
@@ -91,14 +97,14 @@ First you must call `FastAPICache.init` during startup FastAPI startup; this is 
 If you want cache a FastAPI response transparently, you can use the `@cache`
 decorator between the router decorator and the view function.
 
-Parameter | type | default | description
------------- | ----| --------- | --------
-`expire` | `int` |  | sets the caching time in seconds
-`namespace` | `str` | `""` | namespace to use to store certain cache items
-`coder` | `Coder` | `JsonCoder` | which coder to use, e.g. `JsonCoder`
-`key_builder` | `KeyBuilder` callable | `default_key_builder` | which key builder to use
-`injected_dependency_namespace` | `str` | `__fastapi_cache` | prefix for injected dependency keywords.
-`cache_status_header` | `str` | `X-FastAPI-Cache` | Name for the header on the response indicating if the request was served from cache; either `HIT` or `MISS`.
+| Parameter                       | type                  | default               | description                                                                                                  |
+| ------------------------------- | --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `expire`                        | `int`                 |                       | sets the caching time in seconds                                                                             |
+| `namespace`                     | `str`                 | `""`                  | namespace to use to store certain cache items                                                                |
+| `coder`                         | `Coder`               | `JsonCoder`           | which coder to use, e.g. `JsonCoder`                                                                         |
+| `key_builder`                   | `KeyBuilder` callable | `default_key_builder` | which key builder to use                                                                                     |
+| `injected_dependency_namespace` | `str`                 | `__fastapi_cache`     | prefix for injected dependency keywords.                                                                     |
+| `cache_status_header`           | `str`                 | `X-FastAPI-Cache`     | Name for the header on the response indicating if the request was served from cache; either `HIT` or `MISS`. |
 
 You can also use the `@cache` decorator on regular functions to cache their result.
 
@@ -114,7 +120,6 @@ The keyword arguments for these extra dependencies are named
 `__fastapi_cache_request` and `__fastapi_cache_response` to minimize collisions.
 Use the `injected_dependency_namespace` argument to `@cache` to change the
 prefix used if those names would clash anyway.
-
 
 ### Supported data types
 
@@ -227,4 +232,4 @@ xdg-open htmlcov/index.html
 
 ## License
 
-This project is licensed under the [Apache-2.0](https://github.com/long2ice/fastapi-cache/blob/master/LICENSE) License.
+This project is licensed under the [Apache-2.0](https://github.com/Yolley/fastapi-cache/blob/master/LICENSE) License.
