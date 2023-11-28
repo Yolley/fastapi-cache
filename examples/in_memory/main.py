@@ -1,6 +1,7 @@
 # pyright: reportGeneralTypeIssues=false
+
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict, Optional
 
 import pendulum
 import uvicorn
@@ -14,7 +15,7 @@ from starlette.responses import JSONResponse, Response
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     FastAPICache.init(InMemoryBackend())
     yield
 
@@ -65,7 +66,7 @@ async def get_kwargs(name: str):
 
 
 @app.get("/sync-me")
-@cache(namespace="test") # pyright: ignore[reportArgumentType]
+@cache(namespace="test")
 def sync_me():
     # as per the fastapi docs, this sync function is wrapped in a thread,
     # thereby converted to async. fastapi-cache does the same.
@@ -94,15 +95,19 @@ app.get("/method")(cache(namespace="test")(instance.handler_method))
 # cache a Pydantic model instance; the return type annotation is required in this case
 class Item(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     price: float
-    tax: Optional[float] = None
+    tax: float | None = None
 
 
 @app.get("/pydantic_instance")
 @cache(namespace="test", expire=5)
 async def pydantic_instance() -> Item:
-    return Item(name="Something", description="An instance of a Pydantic model", price=10.5)
+    return Item(
+        name="Something",
+        description="An instance of a Pydantic model",
+        price=10.5,
+    )
 
 
 put_ret = 0
@@ -115,21 +120,12 @@ async def uncached_put():
     put_ret = put_ret + 1
     return {"value": put_ret}
 
-put_ret2 = 0
-
-@app.get("/cached_put")
-@cache(namespace="test", expire=5)
-async def cached_put():
-    global put_ret2
-    put_ret2 = put_ret2 + 1
-    return {"value": put_ret2}
-
 
 @app.get("/namespaced_injection")
-@cache(namespace="test", expire=5, injected_dependency_namespace="monty_python") # pyright: ignore[reportArgumentType]
+@cache(namespace="test", expire=5, injected_dependency_namespace="monty_python")
 def namespaced_injection(
     __fastapi_cache_request: int = 42, __fastapi_cache_response: int = 17
-) -> Dict[str, int]:
+) -> dict[str, int]:
     return {
         "__fastapi_cache_request": __fastapi_cache_request,
         "__fastapi_cache_response": __fastapi_cache_response,

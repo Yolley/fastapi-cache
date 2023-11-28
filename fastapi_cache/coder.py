@@ -1,61 +1,54 @@
 import datetime
-import json
-import pickle  # nosec:B403
+import pickle
+from collections.abc import Callable
 from decimal import Decimal
+from functools import partial
 from typing import (
     Any,
-    Callable,
-    ClassVar,
-    Dict,
-    Optional,
     TypeVar,
-    Union,
     overload,
 )
 
-import pendulum
+import msgspec
 from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel
 from starlette.responses import JSONResponse
 from starlette.templating import (
     _TemplateResponse as TemplateResponse,  # pyright: ignore[reportPrivateUsage]
 )
 
-
-class ModelField:
-    pass
-
-_T = TypeVar("_T", bound=type)
+T = TypeVar("T")
 
 
-CONVERTERS: Dict[str, Callable[[str], Any]] = {
-    # Pendulum 3.0.0 adds parse to __all__, at which point these ignores can be removed
-    "date": lambda x: pendulum.parse(x, exact=True),
-    "datetime": lambda x: pendulum.parse(x, exact=True),
-    "decimal": Decimal,
+CONVERTERS: dict[str, Callable[[Any], Any]] = {
+    "date": partial(msgspec.convert, type=datetime.date),
+    "datetime": partial(msgspec.convert, type=datetime.datetime),
+    "decimal": partial(msgspec.convert, type=Decimal),
 }
 
 
-class JsonEncoder(json.JSONEncoder):
-    def default(self, o: Any) -> Any:
-        if isinstance(o, datetime.datetime):
-            return {"val": str(o), "_spec_type": "datetime"}
-        elif isinstance(o, datetime.date):
-            return {"val": str(o), "_spec_type": "date"}
-        elif isinstance(o, Decimal):
-            return {"val": str(o), "_spec_type": "decimal"}
-        else:
-            return jsonable_encoder(o)
+def dec_hook(type_: type[T], obj: Any) -> T:
+    if issubclass(type_, BaseModel):
+        if isinstance(obj, bytes):
+            return type_.model_validate_json(obj)  # type: ignore[return-value]
+        return type_.model_validate(obj)  # type: ignore[return-value]
+    raise NotImplementedError
 
 
-def object_hook(obj: Any) -> Any:
-    _spec_type = obj.get("_spec_type")
-    if not _spec_type:
+def enc_hook(obj: Any) -> Any:
+    try:
+        return jsonable_encoder(obj)
+    except ValueError as e:
+        raise NotImplementedError from e
+
+
+def object_hook(obj: dict[str, Any]) -> Any:
+    if not (_spec_type := obj.get("_spec_type")):
         return obj
 
     if _spec_type in CONVERTERS:
         return CONVERTERS[_spec_type](obj["val"])
-    else:
-        raise TypeError(f"Unknown {_spec_type}")
+    raise TypeError(f"Unknown {_spec_type}")
 
 
 class Coder:
@@ -67,16 +60,9 @@ class Coder:
     def decode(cls, value: bytes) -> Any:
         raise NotImplementedError
 
-    # (Shared) cache for endpoint return types to Pydantic model fields.
-    # Note that subclasses share this cache! If a subclass overrides the
-    # decode_as_type method and then stores a different kind of field for a
-    # given type, do make sure that the subclass provides its own class
-    # attribute for this cache.
-    _type_field_cache: ClassVar[Dict[Any, ModelField]] = {}
-
     @overload
     @classmethod
-    def decode_as_type(cls, value: bytes, *, type_: _T) -> _T:
+    def decode_as_type(cls, value: bytes, *, type_: type[T]) -> T:
         ...
 
     @overload
@@ -85,14 +71,8 @@ class Coder:
         ...
 
     @classmethod
-    def decode_as_type(cls, value: bytes, *, type_: Optional[_T]) -> Union[_T, Any]:
-        """Decode value to the specific given type
-
-        The default implementation uses the Pydantic model system to convert the value.
-
-        """
-        result = cls.decode(value)
-        return result
+    def decode_as_type(cls, value: bytes, *, type_: type[T] | None) -> T | Any:
+        raise NotImplementedError
 
 
 class JsonCoder(Coder):
@@ -100,14 +80,34 @@ class JsonCoder(Coder):
     def encode(cls, value: Any) -> bytes:
         if isinstance(value, JSONResponse):
             return value.body
-        return json.dumps(value, cls=JsonEncoder).encode()
+        if isinstance(value, datetime.datetime):
+            to_encode = {"val": str(value), "_spec_type": "datetime"}
+        elif isinstance(value, datetime.date):
+            to_encode = {"val": str(value), "_spec_type": "date"}
+        elif isinstance(value, Decimal):
+            to_encode = {"val": str(value), "_spec_type": "decimal"}
+        else:
+            to_encode = value
+        return msgspec.json.encode(to_encode, enc_hook=enc_hook)
 
     @classmethod
     def decode(cls, value: bytes) -> Any:
         # explicitly decode from UTF-8 bytes first, as otherwise
         # json.loads() will first have to detect the correct UTF-
         # encoding used.
-        return json.loads(value.decode(), object_hook=object_hook)
+        decoded_value = msgspec.json.decode(value)
+        if isinstance(decoded_value, dict):
+            return object_hook(decoded_value)  # pyright: ignore[reportUnknownArgumentType]
+        return decoded_value
+
+    @classmethod
+    def decode_as_type(cls, value: bytes, *, type_: type[T] | None) -> T | Any:
+        result = cls.decode(value)
+        if type_ is not None:
+            return msgspec.convert(
+                result, strict=False, dec_hook=dec_hook, type=type_
+            )
+        return result
 
 
 class PickleCoder(Coder):
@@ -122,8 +122,8 @@ class PickleCoder(Coder):
         return pickle.loads(value)  # noqa: S301
 
     @classmethod
-    def decode_as_type(cls, value: bytes, *, type_: Optional[_T]) -> Any:
-        # Pickle already produces the correct type on decoding, no point
-        # in paying an extra performance penalty for pydantic to discover
-        # the same.
-        return cls.decode(value)
+    def decode_as_type(cls, value: bytes, *, type_: type[T] | None) -> T | Any:
+        value = cls.decode(value)
+        if type_ is not None and not isinstance(value, type_):
+            return msgspec.convert(value, type=type_, strict=False)
+        return value

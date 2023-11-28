@@ -1,9 +1,9 @@
 import abc
-from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Union
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol
 
 from starlette.requests import Request
 from starlette.responses import Response
-from typing_extensions import Protocol
 
 _Func = Callable[..., Any]
 
@@ -14,27 +14,31 @@ class KeyBuilder(Protocol):
         __function: _Func,
         __namespace: str = ...,
         *,
-        request: Optional[Request] = ...,
-        response: Optional[Response] = ...,
-        args: Tuple[Any, ...],
-        kwargs: Dict[str, Any],
-    ) -> Union[Awaitable[str], str]:
+        request: Request | None = ...,
+        response: Response | None = ...,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Awaitable[str] | str:
         ...
 
 
 class Backend(abc.ABC):
     @abc.abstractmethod
-    async def get_with_ttl(self, key: str) -> Tuple[int, Optional[bytes]]:
-        raise NotImplementedError
+    async def get_with_ttl(self, key: str) -> tuple[int, bytes | None]:
+        ...
 
     @abc.abstractmethod
-    async def get(self, key: str) -> Optional[bytes]:
-        raise NotImplementedError
+    async def get(self, key: str) -> bytes | None:
+        ...
 
     @abc.abstractmethod
-    async def set(self, key: str, value: bytes, expire: Optional[int] = None) -> None:
-        raise NotImplementedError
+    async def set(
+        self, key: str, value: bytes, expire: int | None = None
+    ) -> None:
+        ...
 
     @abc.abstractmethod
-    async def clear(self, namespace: Optional[str] = None, key: Optional[str] = None) -> int:
-        raise NotImplementedError
+    async def clear(
+        self, namespace: str | None = None, key: str | None = None
+    ) -> int:
+        ...
