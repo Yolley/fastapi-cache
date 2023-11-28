@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fastapi-cache2-fork"
-version = "0.3.0"
+version = "0.3.1"
 description = "Cache for FastAPI. An opinionated fork of fastapi-cache library that uses msgspec for json encoding/decoding where possible"
 authors = ["long2ice <long2ice@gmail.com>", "Yolley <comingreal@gmail.com>"]
 license = "Apache-2.0"
