@@ -1,5 +1,3 @@
-# Because this project supports python 3.7 and up, Pyright treats importlib as
-# an external library and so needs to be told to ignore the type issues it sees.
 from importlib.metadata import version
 from typing import ClassVar
 
@@ -7,7 +5,7 @@ from fastapi_cache.coder import Coder, JsonCoder
 from fastapi_cache.key_builder import default_key_builder
 from fastapi_cache.types import Backend, KeyBuilder
 
-__version__ = version("fastapi-cache2-fork")  # pyright: ignore[reportUnknownVariableType]
+__version__ = version("fastapi-cache2-fork")
 __all__ = [
     "Backend",
     "Coder",
