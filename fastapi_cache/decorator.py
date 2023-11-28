@@ -83,9 +83,7 @@ def cache(
     key_builder: KeyBuilder | None = None,
     namespace: str = "",
     injected_dependency_namespace: str = "__fastapi_cache",
-) -> Callable[
-    [Callable[P, Awaitable[R]]], Callable[P, Awaitable[R | Response]]
-]:
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     cache all function
     :param namespace:
@@ -107,9 +105,7 @@ def cache(
         kind=Parameter.KEYWORD_ONLY,
     )
 
-    def wrapper(
-        func: Callable[P, Awaitable[R]]
-    ) -> Callable[P, Awaitable[R | Response]]:
+    def wrapper(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         # get_typed_signature ensures that any forward references are resolved first
         wrapped_signature = get_typed_signature(func)
         to_inject: list[Parameter] = []
@@ -122,7 +118,7 @@ def cache(
         return_type = get_typed_return_annotation(func)
 
         @wraps(func)
-        async def inner(*args: P.args, **kwargs: P.kwargs) -> R | Response:
+        async def inner(*args: P.args, **kwargs: P.kwargs) -> R:
             nonlocal coder
             nonlocal expire
             nonlocal key_builder
@@ -219,7 +215,8 @@ def cache(
                 if_none_match = request and request.headers.get("if-none-match")
                 if if_none_match == etag:
                     response.status_code = HTTP_304_NOT_MODIFIED
-                    return response
+                    # TODO: do not type it because it's a special case and I am not sure how to overload it
+                    return response  # type: ignore
 
             return cast(R, coder.decode_as_type(cached, type_=return_type))
 
