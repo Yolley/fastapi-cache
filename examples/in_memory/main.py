@@ -1,6 +1,5 @@
 # pyright: reportGeneralTypeIssues=false
-
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import pendulum
@@ -15,7 +14,7 @@ from starlette.responses import JSONResponse, Response
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     FastAPICache.init(InMemoryBackend())
     yield
 
@@ -66,7 +65,7 @@ async def get_kwargs(name: str):
 
 
 @app.get("/sync-me")
-@cache(namespace="test")
+@cache(namespace="test")  # pyright: ignore[reportArgumentType]
 def sync_me():
     # as per the fastapi docs, this sync function is wrapped in a thread,
     # thereby converted to async. fastapi-cache does the same.
@@ -103,11 +102,7 @@ class Item(BaseModel):
 @app.get("/pydantic_instance")
 @cache(namespace="test", expire=5)
 async def pydantic_instance() -> Item:
-    return Item(
-        name="Something",
-        description="An instance of a Pydantic model",
-        price=10.5,
-    )
+    return Item(name="Something", description="An instance of a Pydantic model", price=10.5)
 
 
 put_ret = 0
@@ -121,11 +116,20 @@ async def uncached_put():
     return {"value": put_ret}
 
 
+put_ret2 = 0
+
+
+@app.get("/cached_put")
+@cache(namespace="test", expire=5)
+async def cached_put():
+    global put_ret2
+    put_ret2 = put_ret2 + 1
+    return {"value": put_ret2}
+
+
 @app.get("/namespaced_injection")
-@cache(namespace="test", expire=5, injected_dependency_namespace="monty_python")
-def namespaced_injection(
-    __fastapi_cache_request: int = 42, __fastapi_cache_response: int = 17
-) -> dict[str, int]:
+@cache(namespace="test", expire=5, injected_dependency_namespace="monty_python")  # pyright: ignore[reportArgumentType]
+def namespaced_injection(__fastapi_cache_request: int = 42, __fastapi_cache_response: int = 17) -> dict[str, int]:
     return {
         "__fastapi_cache_request": __fastapi_cache_request,
         "__fastapi_cache_response": __fastapi_cache_response,

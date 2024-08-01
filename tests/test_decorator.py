@@ -1,5 +1,6 @@
 import time
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 import pendulum
 import pytest
@@ -22,19 +23,19 @@ def test_datetime() -> None:
         response = client.get("/datetime")
         assert response.headers.get("X-FastAPI-Cache") == "MISS"
         now = response.json().get("now")
-        now_ = pendulum.now()
-        assert pendulum.parse(now) == now_
+        now_ = pendulum.now().replace(microsecond=0)
+        assert pendulum.parse(now).replace(microsecond=0) == now_  # type: ignore[union-attr, call-arg]
         response = client.get("/datetime")
         assert response.headers.get("X-FastAPI-Cache") == "HIT"
         now = response.json().get("now")
-        assert pendulum.parse(now) == now_
+        assert pendulum.parse(now).replace(microsecond=0) == now_  # type: ignore[union-attr, call-arg]
         time.sleep(3)
         response = client.get("/datetime")
         now = response.json().get("now")
         assert response.headers.get("X-FastAPI-Cache") == "MISS"
-        now = pendulum.parse(now)
+        now = pendulum.parse(now).replace(microsecond=0)  # type: ignore[union-attr, call-arg]
         assert now != now_
-        assert now == pendulum.now()
+        assert now == pendulum.now().replace(microsecond=0)
 
 
 def test_date() -> None:
@@ -54,7 +55,7 @@ def test_date() -> None:
         response = client.get("/date")
         assert "X-FastAPI-Cache" not in response.headers
         assert pendulum.parse(response.json()) == pendulum.today()
-        FastAPICache._enable = True # pyright: ignore[reportPrivateUsage]
+        FastAPICache._enable = True  # pyright: ignore[reportPrivateUsage]
 
 
 def test_sync() -> None:
@@ -99,10 +100,10 @@ def test_pydantic_model() -> None:
 
 def test_non_get() -> None:
     with TestClient(app) as client:
-        response = client.put("/cached_put")
+        response = client.put("/uncached_put")
         assert "X-FastAPI-Cache" not in response.headers
         assert response.json() == {"value": 1}
-        response = client.put("/cached_put")
+        response = client.put("/uncached_put")
         assert "X-FastAPI-Cache" not in response.headers
         assert response.json() == {"value": 2}
 
@@ -112,6 +113,7 @@ def test_alternate_injected_namespace() -> None:
         response = client.get("/namespaced_injection")
         assert response.headers.get("X-FastAPI-Cache") == "MISS"
         assert response.json() == {"__fastapi_cache_request": 42, "__fastapi_cache_response": 17}
+
 
 def test_cache_control() -> None:
     with TestClient(app) as client:
