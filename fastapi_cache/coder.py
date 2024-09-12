@@ -79,7 +79,7 @@ class JsonCoder(Coder):
     @classmethod
     def encode(cls, value: Any) -> bytes:
         if isinstance(value, JSONResponse):
-            return value.body
+            return value.body if isinstance(value.body, bytes) else bytes(value.body)
         if isinstance(value, datetime.datetime):
             to_encode = {"val": str(value), "_spec_type": "datetime"}
         elif isinstance(value, datetime.date):
