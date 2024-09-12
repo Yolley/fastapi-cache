@@ -19,12 +19,12 @@ jobs:
         run: pipx install poetry
       - name: Setup Python
         id: setup-python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
           cache: poetry
       - name: Cache mypy cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .mypy_cache
           key: ${{ runner.os }}-mypy-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('poetry.lock') }}
@@ -83,7 +83,7 @@ jobs:
       - name: Install Poetry
         run: pipx install poetry
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
           cache: poetry
@@ -109,7 +109,7 @@ jobs:
       id-token: write
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
