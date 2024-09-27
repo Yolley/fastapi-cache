@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fastapi-cache2-fork"
-version = "0.4.0"
+version = "0.5.0"
 description = "Cache for FastAPI. An opinionated fork of fastapi-cache library that uses msgspec for json encoding/decoding where possible"
 authors = ["long2ice <long2ice@gmail.com>", "Yolley <comingreal@gmail.com>"]
 license = "Apache-2.0"
@@ -23,6 +23,8 @@ redis = { version = ">=5,<6", optional = true }
 uvicorn = "*"
 
 [tool.poetry.group.dev.dependencies]
+asgi-lifespan = "*"
+anyio = "*"
 coverage = ">=6.5,<8.0"
 httpx = "*"
 pendulum = "^3.0.0"

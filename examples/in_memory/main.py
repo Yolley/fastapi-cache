@@ -1,4 +1,5 @@
 # pyright: reportGeneralTypeIssues=false
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -125,6 +126,18 @@ async def cached_put():
     global put_ret2
     put_ret2 = put_ret2 + 1
     return {"value": put_ret2}
+
+
+put_ret3 = 0
+
+
+@app.get("/cached_with_lock")
+@cache(namespace="test", with_lock=True, lock_timeout=3)
+async def cached_with_lock():
+    global put_ret3
+    put_ret3 = put_ret3 + 1
+    await asyncio.sleep(1)
+    return {"value": put_ret3}
 
 
 @app.get("/namespaced_injection")

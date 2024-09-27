@@ -1,8 +1,9 @@
+from contextlib import AbstractAsyncContextManager
 from functools import cached_property
-from typing import Union
+from typing import Any, Union
 
-from redis.asyncio.client import Redis
-from redis.asyncio.cluster import RedisCluster
+from redis.asyncio import Redis, RedisCluster
+from redis.asyncio.lock import Lock
 
 from fastapi_cache.types import Backend
 
@@ -43,6 +44,11 @@ class RedisBackend(Backend):
 
     async def set(self, key: str, value: bytes, expire: int | None = None) -> None:
         await self.redis_write.set(key, value, ex=expire)
+
+    def lock(self, key: str, timeout: int) -> AbstractAsyncContextManager[Any]:
+        lock_key = f"{key}::lock"
+
+        return Lock(self.redis_write, lock_key, timeout=timeout)
 
     async def clear(self, namespace: str | None = None, key: str | None = None) -> int:
         if namespace:

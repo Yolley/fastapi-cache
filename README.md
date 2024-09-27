@@ -95,16 +95,20 @@ First you must call `FastAPICache.init` during startup FastAPI startup; this is 
 If you want cache a FastAPI response transparently, you can use the `@cache`
 decorator between the router decorator and the view function.
 
-Parameter | type | default | description
------------- | ----| --------- | --------
-`expire` | `int` |  | sets the caching time in seconds
-`namespace` | `str` | `""` | namespace to use to store certain cache items
-`coder` | `Coder` | `JsonCoder` | which coder to use, e.g. `JsonCoder`
+Parameter | type | default               | description
+------------ | ----|-----------------------| --------
+`expire` | `int` |                       | sets the caching time in seconds
+`namespace` | `str` | `""`                  | namespace to use to store certain cache items
+`coder` | `Coder` | `JsonCoder`           | which coder to use, e.g. `JsonCoder`
 `key_builder` | `KeyBuilder` callable | `default_key_builder` | which key builder to use
-`injected_dependency_namespace` | `str` | `__fastapi_cache` | prefix for injected dependency keywords.
-`cache_status_header` | `str` | `X-FastAPI-Cache` | Name for the header on the response indicating if the request was served from cache; either `HIT` or `MISS`.
+`injected_dependency_namespace` | `str` | `__fastapi_cache`     | prefix for injected dependency keywords.
+`cache_status_header` | `str` | `X-FastAPI-Cache`     | Name for the header on the response indicating if the request was served from cache; either `HIT` or `MISS`.
+`with_lock` | `bool` | False                 | Whether to lock on cache get/set - may be useful to limit concurrent executions of heavy functions so that the first call could cache the function and subsequent calls will return the cached version
+`lock_timeout` | `int` | 60                    | Timeout used when lock is enabled - function will be executed after timeout expires or when lock is released
 
 You can also use the `@cache` decorator on regular functions to cache their result.
+
+Currently, lock is available only with `inmemory` and `redis` backends (other backends will just ignore it).
 
 ### Injected Request and Response dependencies
 

@@ -1,4 +1,5 @@
 # pyright: reportGeneralTypeIssues=false
+import asyncio
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -22,7 +23,7 @@ from redis.asyncio.connection import ConnectionPool
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    pool = ConnectionPool.from_url(url="redis://redis")
+    pool = ConnectionPool.from_url(url="redis://localhost")
     r = redis.Redis(connection_pool=pool)
     FastAPICache.init(RedisBackend(r), prefix="fastapi-cache")
     yield
@@ -83,6 +84,14 @@ async def get_datetime(request: Request, response: Response):
 @cache(expire=60, namespace="html", coder=PickleCoder)
 async def cache_html(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "ret": await get_ret()})
+
+
+@app.get("/with_lock")
+@cache(namespace="test", with_lock=True)
+async def cache_with_lock():
+    print("lock acquired")
+    await asyncio.sleep(3)
+    return {"result": 42}
 
 
 @app.get("/cache_response_obj")

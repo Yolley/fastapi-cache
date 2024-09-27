@@ -1,6 +1,9 @@
+import asyncio
 import time
-from asyncio import Lock
+from collections.abc import AsyncGenerator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi_cache.types import Backend
 
@@ -13,7 +16,27 @@ class Value:
 
 class InMemoryBackend(Backend):
     _store: dict[str, Value] = {}
-    _lock = Lock()
+    _locks: dict[str, asyncio.Lock] = {}
+    _check_lock = asyncio.Lock()
+
+    @asynccontextmanager
+    async def get_lock(self, name: str, timeout: int) -> AsyncGenerator[None, None]:
+        async with self._check_lock:
+            if name not in self._locks:
+                self._locks[name] = asyncio.Lock()
+        result: bool
+        try:
+            result = await asyncio.wait_for(self._locks[name].acquire(), timeout)
+        except TimeoutError:
+            result = False
+        try:
+            yield
+        finally:
+            if result:
+                self._locks[name].release()
+                async with self._check_lock:
+                    if name in self._locks and not getattr(self._locks[name], "_waiters", None):
+                        del self._locks[name]
 
     @property
     def _now(self) -> int:
@@ -29,22 +52,24 @@ class InMemoryBackend(Backend):
         return None
 
     async def get_with_ttl(self, key: str) -> tuple[int, bytes | None]:
-        async with self._lock:
-            v = self._get(key)
-            if v:
-                return v.ttl_ts - self._now, v.data
-            return 0, None
+        v = self._get(key)
+        if v:
+            return v.ttl_ts - self._now, v.data
+        return 0, None
 
     async def get(self, key: str) -> bytes | None:
-        async with self._lock:
-            v = self._get(key)
-            if v:
-                return v.data
-            return None
+        v = self._get(key)
+        if v:
+            return v.data
+        return None
 
     async def set(self, key: str, value: bytes, expire: int | None = None) -> None:
-        async with self._lock:
-            self._store[key] = Value(value, self._now + (expire or 0))
+        self._store[key] = Value(value, self._now + (expire or 0))
+
+    def lock(self, key: str, timeout: int) -> AbstractAsyncContextManager[Any]:
+        lock_key = f"{key}::lock"
+
+        return self.get_lock(lock_key, timeout)
 
     async def clear(self, namespace: str | None = None, key: str | None = None) -> int:
         count = 0

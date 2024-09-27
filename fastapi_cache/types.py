@@ -1,5 +1,6 @@
 import abc
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from typing import Any, Protocol
 
 from starlette.requests import Request
@@ -32,13 +33,12 @@ class Backend(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def set(
-        self, key: str, value: bytes, expire: int | None = None
-    ) -> None:
+    async def set(self, key: str, value: bytes, expire: int | None = None) -> None:
         ...
 
+    def lock(self, key: str, timeout: int) -> AbstractAsyncContextManager[Any]:
+        return AsyncExitStack()  # pyright: ignore [reportUnknownVariableType]
+
     @abc.abstractmethod
-    async def clear(
-        self, namespace: str | None = None, key: str | None = None
-    ) -> int:
+    async def clear(self, namespace: str | None = None, key: str | None = None) -> int:
         ...

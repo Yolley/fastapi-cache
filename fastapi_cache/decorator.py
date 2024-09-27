@@ -1,8 +1,10 @@
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import AsyncExitStack
 from functools import wraps
 from inspect import Parameter, Signature, isawaitable, iscoroutinefunction
 from typing import (
+    Any,
     ParamSpec,
     TypeVar,
     cast,
@@ -13,11 +15,12 @@ from fastapi.dependencies.utils import (
     get_typed_return_annotation,
     get_typed_signature,
 )
+from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.status import HTTP_304_NOT_MODIFIED
 
-from fastapi_cache import FastAPICache
+from fastapi_cache import Backend, FastAPICache
 from fastapi_cache.coder import Coder
 from fastapi_cache.types import KeyBuilder
 
@@ -36,14 +39,10 @@ def _augment_signature(signature: Signature, *extra: Parameter) -> Signature:
     while parameters and parameters[-1].kind is Parameter.VAR_KEYWORD:
         variadic_keyword_params.append(parameters.pop())
 
-    return signature.replace(
-        parameters=[*parameters, *extra, *variadic_keyword_params]
-    )
+    return signature.replace(parameters=[*parameters, *extra, *variadic_keyword_params])
 
 
-def _locate_param(
-    sig: Signature, dep: Parameter, to_inject: list[Parameter]
-) -> Parameter:
+def _locate_param(sig: Signature, dep: Parameter, to_inject: list[Parameter]) -> Parameter:
     """Locate an existing parameter in the decorated endpoint
 
     If not found, returns the injectable parameter, and adds it to the to_inject list.
@@ -77,11 +76,25 @@ def _uncacheable(request: Request | None) -> bool:
     return request.headers.get("Cache-Control") == "no-store"
 
 
+async def _get_cached(backend: Backend, cache_key: str) -> tuple[int, Any]:
+    try:
+        ttl, cached = await backend.get_with_ttl(cache_key)
+    except Exception:
+        logger.warning(
+            f"Error retrieving cache key '{cache_key}' from backend:",
+            exc_info=True,
+        )
+        ttl, cached = 0, None
+    return ttl, cached
+
+
 def cache(
     expire: int | None = None,
     coder: type[Coder] | None = None,
     key_builder: KeyBuilder | None = None,
     namespace: str = "",
+    with_lock: bool = False,
+    lock_timeout: int = 60,
     injected_dependency_namespace: str = "__fastapi_cache",
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
@@ -91,6 +104,8 @@ def cache(
     :param expire:
     :param coder:
     :param key_builder:
+    :param with_lock:
+    :param lock_timeout:
 
     :return:
     """
@@ -110,12 +125,8 @@ def cache(
         # get_typed_signature ensures that any forward references are resolved first
         wrapped_signature = get_typed_signature(func)
         to_inject: list[Parameter] = []
-        request_param = _locate_param(
-            wrapped_signature, injected_request, to_inject
-        )
-        response_param = _locate_param(
-            wrapped_signature, injected_response, to_inject
-        )
+        request_param = _locate_param(wrapped_signature, injected_request, to_inject)
+        response_param = _locate_param(wrapped_signature, injected_response, to_inject)
         return_type = get_typed_return_annotation(func)
 
         @wraps(func)
@@ -145,13 +156,13 @@ def cache(
 
             copy_kwargs = kwargs.copy()
             request: Request | None = copy_kwargs.pop(request_param.name, None)  # type: ignore[assignment]
-            response: Response | None = copy_kwargs.pop(
-                response_param.name, None
-            )  # type: ignore[assignment]
+            response: Response | None = copy_kwargs.pop(response_param.name, None)  # type: ignore[assignment]
 
             if _uncacheable(request):
                 return await ensure_async_func(*args, **kwargs)
 
+            headers: Headers | dict[str, str] = request.headers if request else {}
+            no_cache = headers.get("Cache-Control") == "no-cache"
             prefix = FastAPICache.get_prefix()
             coder = coder or FastAPICache.get_coder()
             expire = expire or FastAPICache.get_expire()
@@ -171,37 +182,39 @@ def cache(
                 cache_key = await cache_key
             assert isinstance(cache_key, str)  # noqa: S101  # assertion is a type guard
 
-            try:
-                ttl, cached = await backend.get_with_ttl(cache_key)
-            except Exception:
-                logger.warning(
-                    f"Error retrieving cache key '{cache_key}' from backend:",
-                    exc_info=True,
-                )
-                ttl, cached = 0, None
+            if with_lock:
+                lock = backend.lock(cache_key, lock_timeout)
+            else:
+                lock = AsyncExitStack()
 
-            if cached is None  or (request is not None and request.headers.get("Cache-Control") == "no-cache") :  # cache miss
-                result = await ensure_async_func(*args, **kwargs)
-                to_cache = coder.encode(result)
+            ttl, cached = await _get_cached(backend, cache_key)
 
-                try:
-                    await backend.set(cache_key, to_cache, expire)
-                except Exception:
-                    logger.warning(
-                        f"Error setting cache key '{cache_key}' in backend:",
-                        exc_info=True,
-                    )
+            if cached is None or no_cache:
+                async with lock:
+                    if cached is None and with_lock:
+                        ttl, cached = await _get_cached(backend, cache_key)
+                    if cached is None or no_cache:
+                        result = await ensure_async_func(*args, **kwargs)
+                        to_cache = coder.encode(result)
 
-                if response:
-                    response.headers.update(
-                        {
-                            "Cache-Control": f"max-age={expire}",
-                            "ETag": f"W/{hash(to_cache)}",
-                            cache_status_header: "MISS",
-                        }
-                    )
+                        try:
+                            await backend.set(cache_key, to_cache, expire)
+                        except Exception:
+                            logger.warning(
+                                f"Error setting cache key '{cache_key}' in backend:",
+                                exc_info=True,
+                            )
 
-                return result
+                        if response:
+                            response.headers.update(
+                                {
+                                    "Cache-Control": f"max-age={expire}",
+                                    "ETag": f"W/{hash(to_cache)}",
+                                    cache_status_header: "MISS",
+                                }
+                            )
+
+                        return result
 
             if response:
                 etag = f"W/{hash(cached)}"
@@ -213,7 +226,7 @@ def cache(
                     }
                 )
 
-                if_none_match = request and request.headers.get("if-none-match")
+                if_none_match = headers.get("if-none-match")
                 if if_none_match == etag:
                     response.status_code = HTTP_304_NOT_MODIFIED
                     # TODO: do not type it because it's a special case and I am not sure how to overload it
