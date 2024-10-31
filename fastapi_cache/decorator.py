@@ -58,7 +58,7 @@ def _locate_param(sig: Signature, dep: Parameter, to_inject: list[Parameter]) ->
     return param
 
 
-def _uncacheable(request: Request | None) -> bool:
+def _uncacheable(request: Request | None, bypass_cache_control: bool) -> bool:
     """Determine if this request should not be cached
 
     Returns true if:
@@ -69,7 +69,7 @@ def _uncacheable(request: Request | None) -> bool:
     """
     if not FastAPICache.get_enable():
         return True
-    if request is None:
+    if request is None or bypass_cache_control:
         return False
     if request.method != "GET":
         return True
@@ -95,6 +95,7 @@ def cache(
     namespace: str = "",
     with_lock: bool = False,
     lock_timeout: int = 60,
+    bypass_cache_control: bool = False,
     injected_dependency_namespace: str = "__fastapi_cache",
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
@@ -106,6 +107,7 @@ def cache(
     :param key_builder:
     :param with_lock:
     :param lock_timeout:
+    :param bypass_cache_control
 
     :return:
     """
@@ -158,11 +160,11 @@ def cache(
             request: Request | None = copy_kwargs.pop(request_param.name, None)  # type: ignore[assignment]
             response: Response | None = copy_kwargs.pop(response_param.name, None)  # type: ignore[assignment]
 
-            if _uncacheable(request):
+            if _uncacheable(request, bypass_cache_control):
                 return await ensure_async_func(*args, **kwargs)
 
             headers: Headers | dict[str, str] = request.headers if request else {}
-            no_cache = headers.get("Cache-Control") == "no-cache"
+            no_cache = not bypass_cache_control and headers.get("Cache-Control") == "no-cache"
             prefix = FastAPICache.get_prefix()
             coder = coder or FastAPICache.get_coder()
             expire = expire or FastAPICache.get_expire()
@@ -205,6 +207,9 @@ def cache(
                                 exc_info=True,
                             )
 
+                        # in case route returns response we should set headers on it
+                        if isinstance(result, Response):
+                            response = result
                         if response:
                             response.headers.update(
                                 {

@@ -131,13 +131,24 @@ async def cached_put():
 put_ret3 = 0
 
 
+@app.get("/cached_with_bypass")
+@cache(namespace="test", expire=5, bypass_cache_control=True)
+async def cached_with_bypass():
+    global put_ret3
+    put_ret3 = put_ret3 + 1
+    return {"value": put_ret3}
+
+
+put_ret4 = 0
+
+
 @app.get("/cached_with_lock")
 @cache(namespace="test", with_lock=True, lock_timeout=3)
 async def cached_with_lock():
-    global put_ret3
-    put_ret3 = put_ret3 + 1
+    global put_ret4
+    put_ret4 = put_ret4 + 1
     await asyncio.sleep(1)
-    return {"value": put_ret3}
+    return {"value": put_ret4}
 
 
 @app.get("/namespaced_injection")

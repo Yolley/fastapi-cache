@@ -54,6 +54,7 @@ async def test_sync(client: AsyncClient) -> None:
 async def test_cache_response_obj(client: AsyncClient) -> None:
     cache_response = await client.get("cache_response_obj")
     assert cache_response.json() == {"a": 1}
+    assert cache_response.headers.get("cache-control")
     get_cache_response = await client.get("cache_response_obj")
     assert get_cache_response.json() == {"a": 1}
     assert get_cache_response.headers.get("cache-control")
@@ -116,6 +117,14 @@ async def test_cache_control(client: AsyncClient) -> None:
 
     response = await client.get("/cached_put")
     assert response.json() == {"value": 2}
+
+    # bypass
+    response = await client.get("/cached_with_bypass")
+    assert response.json() == {"value": 1}
+
+    # HIT, bypass Cache-Control
+    response = await client.get("/cached_with_bypass", headers={"Cache-Control": "no-cache"})
+    assert response.json() == {"value": 1}
 
 
 async def test_lock(client: AsyncClient) -> None:

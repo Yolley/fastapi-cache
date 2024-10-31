@@ -105,6 +105,7 @@ Parameter | type | default               | description
 `cache_status_header` | `str` | `X-FastAPI-Cache`     | Name for the header on the response indicating if the request was served from cache; either `HIT` or `MISS`.
 `with_lock` | `bool` | False                 | Whether to lock on cache get/set - may be useful to limit concurrent executions of heavy functions so that the first call could cache the function and subsequent calls will return the cached version
 `lock_timeout` | `int` | 60                    | Timeout used when lock is enabled - function will be executed after timeout expires or when lock is released
+`bypass_cache_control` | `bool` | False | Bypass "Cache-Control" headers from origin - may be useful to enforce caching
 
 You can also use the `@cache` decorator on regular functions to cache their result.
 
