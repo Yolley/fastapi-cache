@@ -30,7 +30,6 @@ class DynamoBackend(Backend):
         >> FastAPICache.init(dynamodb)
     """
 
-    client: DynamoDBClient
     session: AioSession
     table_name: str
     region: str | None
@@ -39,14 +38,22 @@ class DynamoBackend(Backend):
         self.session: AioSession = get_session()
         self.table_name = table_name
         self.region = region
+        self._client: DynamoDBClient | None = None
+
+    @property
+    def client(self) -> DynamoDBClient:
+        if not self._client:
+            raise Exception("Backend not initiated!")
+        return self._client
 
     async def init(self) -> None:
-        self.client = await self.session.create_client(  # pyright: ignore[reportUnknownMemberType]
+        self._client = await self.session.create_client(  # pyright: ignore[reportUnknownMemberType]
             "dynamodb", region_name=self.region
         ).__aenter__()
 
     async def close(self) -> None:
-        self.client = await self.client.__aexit__(None, None, None)
+        await self.client.__aexit__(None, None, None)
+        self._client = None
 
     async def get_with_ttl(self, key: str) -> tuple[int, bytes | None]:
         response = await self.client.get_item(TableName=self.table_name, Key={"key": {"S": key}})
@@ -73,17 +80,7 @@ class DynamoBackend(Backend):
 
     async def set(self, key: str, value: bytes, expire: int | None = None) -> None:
         ttl = (
-            {
-                "ttl": {
-                    "N": str(
-                        int(
-                            (
-                                datetime.datetime.now() + datetime.timedelta(seconds=expire)
-                            ).timestamp()
-                        )
-                    )
-                }
-            }
+            {"ttl": {"N": str(int((datetime.datetime.now() + datetime.timedelta(seconds=expire)).timestamp()))}}
             if expire
             else {}
         )
