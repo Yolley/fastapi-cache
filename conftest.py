@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 from asgi_lifespan import LifespanManager
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
@@ -33,5 +33,5 @@ async def app() -> AsyncGenerator[Any, None]:
 
 @pytest.fixture(scope="session")
 async def client(app: Any) -> AsyncGenerator[AsyncClient, None]:
-    async with AsyncClient(app=app, base_url="http://localhost") as client:
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://localhost") as client:
         yield client
