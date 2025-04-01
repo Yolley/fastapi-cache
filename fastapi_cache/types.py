@@ -1,4 +1,5 @@
 import abc
+import inspect
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from typing import Any, Protocol
@@ -42,3 +43,7 @@ class Backend(abc.ABC):
     @abc.abstractmethod
     async def clear(self, namespace: str | None = None, key: str | None = None) -> int:
         ...
+
+
+def is_subclass_safe(value: Any, classinfo: type) -> bool:
+    return inspect.isclass(value) and issubclass(value, classinfo)

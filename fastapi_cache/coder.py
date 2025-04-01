@@ -17,6 +17,8 @@ from starlette.templating import (
     _TemplateResponse as TemplateResponse,  # pyright: ignore[reportPrivateUsage]
 )
 
+from fastapi_cache.types import is_subclass_safe
+
 T = TypeVar("T")
 
 
@@ -28,10 +30,10 @@ CONVERTERS: dict[str, Callable[[Any], Any]] = {
 
 
 def dec_hook(type_: type[T], obj: Any) -> T:
-    if issubclass(type_, BaseModel):
+    if is_subclass_safe(type_, BaseModel):
         if isinstance(obj, bytes):
-            return type_.model_validate_json(obj)  # type: ignore[return-value]
-        return type_.model_validate(obj)  # type: ignore[return-value]
+            return type_.model_validate_json(obj)  # type: ignore[no-any-return, attr-defined]
+        return type_.model_validate(obj)  # type: ignore[no-any-return, attr-defined]
     raise NotImplementedError
 
 
@@ -102,7 +104,7 @@ class JsonCoder(Coder):
 
     @classmethod
     def decode_as_type(cls, value: bytes, *, type_: type[T] | None) -> T | Any:
-        if type_ and issubclass(type_, Response):
+        if type_ and is_subclass_safe(type_, Response):
             return Response(value)
         result = cls.decode(value)
         if type_ is not None:
