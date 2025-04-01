@@ -221,8 +221,8 @@ def cache(
 
                         return result
 
-            if response:
-                etag = f"W/{hash(cached)}"
+            etag = f"W/{hash(cached)}"
+            if response and (if_none_match := headers.get("if-none-match")) and (if_none_match == etag):
                 response.headers.update(
                     {
                         "Cache-Control": f"max-age={ttl}",
@@ -231,13 +231,23 @@ def cache(
                     }
                 )
 
-                if_none_match = headers.get("if-none-match")
-                if if_none_match == etag:
-                    response.status_code = HTTP_304_NOT_MODIFIED
-                    # TODO: do not type it because it's a special case and I am not sure how to overload it
-                    return response  # type: ignore
+                response.status_code = HTTP_304_NOT_MODIFIED
+                # TODO: do not type it because it's a special case and I am not sure how to overload it
+                return response  # type: ignore
 
-            return cast(R, coder.decode_as_type(cached, type_=return_type))
+            cached_decoded = cast(R, coder.decode_as_type(cached, type_=return_type))
+            if isinstance(cached_decoded, Response):
+                response = cached_decoded
+
+            if response:
+                response.headers.update(
+                    {
+                        "Cache-Control": f"max-age={ttl}",
+                        "ETag": etag,
+                        cache_status_header: "HIT",
+                    }
+                )
+            return cached_decoded
 
         inner.__signature__ = _augment_signature(wrapped_signature, *to_inject)  # type: ignore[attr-defined]
 

@@ -79,6 +79,12 @@ async def cache_response_obj():
     return JSONResponse({"a": 1})
 
 
+@app.get("/cache_response_obj_typed")
+@cache(namespace="test", expire=5)
+async def cache_response_obj_typed() -> JSONResponse:
+    return JSONResponse({"a": 1})
+
+
 class SomeClass:
     def __init__(self, value):
         self.value = value

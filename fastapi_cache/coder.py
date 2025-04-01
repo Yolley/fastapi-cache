@@ -12,7 +12,7 @@ from typing import (
 import msgspec
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.templating import (
     _TemplateResponse as TemplateResponse,  # pyright: ignore[reportPrivateUsage]
 )
@@ -104,9 +104,9 @@ class JsonCoder(Coder):
     def decode_as_type(cls, value: bytes, *, type_: type[T] | None) -> T | Any:
         result = cls.decode(value)
         if type_ is not None:
-            return msgspec.convert(
-                result, strict=False, dec_hook=dec_hook, type=type_
-            )
+            if issubclass(type_, Response):
+                return Response(value)
+            return msgspec.convert(result, strict=False, dec_hook=dec_hook, type=type_)
         return result
 
 

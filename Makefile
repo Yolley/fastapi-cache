@@ -1,24 +1,23 @@
 up:
-	@poetry update
+	@uv update
 
 deps:
-	@poetry install --no-root --with=linting --all-extras
+	@uv sync --all-groups
 
 format: deps
-	@poetry run tox run -e format
+	@uv run tox run -e format
 
 lint: deps
-	@poetry run tox run -e lint
+	@uv run tox run -e lint
 
 test: deps
-	@poetry run tox
+	@uv run tox
 
 test-parallel: deps
-	@poetry run tox run-parallel
+	@uv run tox run-parallel
 
 build: clean deps
-	@poetry build
-	@poetry run tox run -e lint_distributions
+	@uv build
 
 clean:
 	@rm -rf ./dist

@@ -1,7 +1,9 @@
 import asyncio
 import time
+from unittest import mock
 
 import pendulum
+from fastapi.routing import serialize_response
 from httpx import AsyncClient
 
 from fastapi_cache import FastAPICache
@@ -52,13 +54,29 @@ async def test_sync(client: AsyncClient) -> None:
 
 
 async def test_cache_response_obj(client: AsyncClient) -> None:
-    cache_response = await client.get("cache_response_obj")
-    assert cache_response.json() == {"a": 1}
-    assert cache_response.headers.get("cache-control")
-    get_cache_response = await client.get("cache_response_obj")
-    assert get_cache_response.json() == {"a": 1}
-    assert get_cache_response.headers.get("cache-control")
-    assert get_cache_response.headers.get("etag")
+    with mock.patch("fastapi.routing.serialize_response", side_effect=serialize_response) as m:
+        cache_response = await client.get("cache_response_obj")
+        assert cache_response.json() == {"a": 1}
+        assert cache_response.headers.get("cache-control")
+        assert m.call_count == 0
+        get_cache_response = await client.get("cache_response_obj")
+        assert get_cache_response.json() == {"a": 1}
+        assert get_cache_response.headers.get("cache-control")
+        assert get_cache_response.headers.get("etag")
+        assert m.call_count == 1
+
+
+async def test_cache_response_obj_typed(client: AsyncClient) -> None:
+    with mock.patch("fastapi.routing.serialize_response", side_effect=serialize_response) as m:
+        cache_response = await client.get("cache_response_obj_typed")
+        assert cache_response.json() == {"a": 1}
+        assert cache_response.headers.get("cache-control")
+        assert m.call_count == 0
+        get_cache_response = await client.get("cache_response_obj_typed")
+        assert get_cache_response.json() == {"a": 1}
+        assert get_cache_response.headers.get("cache-control")
+        assert get_cache_response.headers.get("etag")
+        assert m.call_count == 0
 
 
 async def test_kwargs(client: AsyncClient) -> None:
@@ -138,3 +156,7 @@ async def test_lock(client: AsyncClient) -> None:
 
     response = await client.get("/cached_with_lock", headers={"Cache-Control": "no-cache"})
     assert response.json() == {"value": 2}
+
+
+async def test_response_caching(client: AsyncClient) -> None:
+    pass
