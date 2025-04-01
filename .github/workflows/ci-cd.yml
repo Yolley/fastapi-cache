@@ -58,7 +58,7 @@ jobs:
           make deps
           uv run --no-sync pip install tox-gh-actions
       - name: Execute tests
-        run: uv run --no-sync run tox
+        run: uv run --no-sync tox
 
   test-summary:
     name: Test matrix status

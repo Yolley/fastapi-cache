@@ -102,10 +102,10 @@ class JsonCoder(Coder):
 
     @classmethod
     def decode_as_type(cls, value: bytes, *, type_: type[T] | None) -> T | Any:
+        if type_ and issubclass(type_, Response):
+            return Response(value)
         result = cls.decode(value)
         if type_ is not None:
-            if issubclass(type_, Response):
-                return Response(value)
             return msgspec.convert(result, strict=False, dec_hook=dec_hook, type=type_)
         return result
 
