@@ -30,7 +30,7 @@ jobs:
             ${{ runner.os }}-mypy-${{ steps.setup-python.outputs.python-version }}-
             ${{ runner.os }}-mypy-
       - name: Install dependencies
-        run: make dep
+        run: make deps
       - name: Execute linters
         run: make lint
 
