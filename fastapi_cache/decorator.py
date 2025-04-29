@@ -131,15 +131,15 @@ class Cached(Generic[P, R]):
         self.__ctx_token: Token[CacheCtx] | None = None
 
     async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        with self.__ctx_token_cycle():
+        with self.cache_ctx_cycle():
             return await self.inner(*args, **kwargs)  # type: ignore[return-value]
 
     @contextmanager
-    def __ctx_token_cycle(self) -> Generator[None, None, None]:
-        self.__ctx_token = None
+    def cache_ctx_cycle(self) -> Generator[None, None, None]:
+        ctx = self.get_local_ctx()
+        token = cache_ctx_var.set(ctx)
         yield
-        if self.__ctx_token:
-            cache_ctx_var.reset(self.__ctx_token)
+        cache_ctx_var.reset(token)
 
     @property
     def global_ctx(self) -> CacheCtx:
@@ -171,11 +171,8 @@ class Cached(Generic[P, R]):
             return self.global_ctx
 
     async def ensure_async_func(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        """Run cached sync functions in a thread pool just like FastAPI
-
-        Sets local context that may be optionally used and updated by the function."""
-        ctx = self.get_local_ctx()
-        self.__ctx_token = cache_ctx_var.set(ctx)
+        """Run cached sync functions in a thread pool just like FastAPI."""
+        ctx = self.get_ctx()
 
         # if the wrapped function does NOT have a request or response in
         # its function signature, make sure we don't pass them in as
