@@ -7,6 +7,7 @@ from fastapi.routing import serialize_response
 from httpx import AsyncClient
 
 from fastapi_cache import FastAPICache
+from fastapi_cache.decorator import MAX_AGE_NEVER_EXPIRES
 
 
 async def test_datetime(client: AsyncClient) -> None:
@@ -156,6 +157,20 @@ async def test_lock(client: AsyncClient) -> None:
 
     response = await client.get("/cached_with_lock", headers={"Cache-Control": "no-cache"})
     assert response.json() == {"value": 2}
+
+
+async def test_ctx(client: AsyncClient) -> None:
+    response = await client.get("/cached_with_ctx", params={"update_expire": 1})
+    assert response.headers.get("cache-control") == "max-age=3600"
+    assert response.json() == {"value": 1}
+    response = await client.get("/cached_with_ctx", params={"update_expire": 1})
+    assert response.headers.get("X-FastAPI-Cache") == "HIT"
+    assert response.json() == {"value": 1}
+
+    # ensure that global ctx remains
+    response = await client.get("/cached_with_ctx", params={"update_expire": 0})
+    assert response.json() == {"value": 2}
+    assert response.headers.get("cache-control") == f"max-age={MAX_AGE_NEVER_EXPIRES}"
 
 
 async def test_response_caching(client: AsyncClient) -> None:

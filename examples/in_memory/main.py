@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 import pendulum
 import uvicorn
 from fastapi import FastAPI
-from fastapi_cache import FastAPICache
+from fastapi_cache import FastAPICache, get_cache_ctx
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from fastapi_cache.decorator import cache
 from pydantic import BaseModel
@@ -155,6 +155,21 @@ async def cached_with_lock():
     put_ret4 = put_ret4 + 1
     await asyncio.sleep(1)
     return {"value": put_ret4}
+
+
+put_ret5 = 0
+
+
+@app.get("/cached_with_ctx")
+@cache(namespace="test")
+async def cached_with_ctx(update_expire: bool = True):
+    global put_ret5
+
+    ctx = get_cache_ctx()
+    if update_expire:
+        ctx["expire"] = 3_600
+    put_ret5 = put_ret5 + 1
+    return {"value": put_ret5}
 
 
 @app.get("/namespaced_injection")

@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi_cache import FastAPICache
+from fastapi_cache import FastAPICache, get_cache_ctx
 from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache.coder import PickleCoder
 from fastapi_cache.decorator import cache
@@ -91,6 +91,15 @@ async def cache_html(request: Request):
 async def cache_with_lock():
     print("lock acquired")
     await asyncio.sleep(3)
+    return {"result": 42}
+
+
+@app.get("/with_ctx")
+@cache(namespace="test")
+async def cache_with_ctx():
+    ctx = get_cache_ctx()
+
+    ctx["expire"] = 300
     return {"result": 42}
 
 

@@ -1,12 +1,12 @@
 [project]
 name = "fastapi-cache2-fork"
-version = "0.8.1"
+version = "1.0.0"
 description = "Cache for FastAPI. An opinionated fork of fastapi-cache library that uses msgspec for json encoding/decoding where possible"
 authors = [
     { name = "long2ice", email = "long2ice@gmail.com" },
     { name = "Yolley", email = "comingreal@gmail.com" },
 ]
-requires-python = "~=3.11"
+requires-python = "~=3.12"
 readme = "README.md"
 license = "Apache-2.0"
 keywords = [
@@ -87,7 +87,7 @@ build-backend = "hatchling.build"
 
 [tool.mypy]
 files = ["."]
-python_version = "3.11"
+python_version = "3.12"
 # equivalent of --strict
 warn_unused_configs = true
 disallow_any_generics = true
@@ -120,7 +120,7 @@ issue_format = "[#{issue}](https://github.com/Yolley/fastapi-cache/issues/{issue
 
 [tool.pyright]
 strict = ["fastapi_cache", "tests"]
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 
 [tool.pytest.ini_options]
 addopts = "-p no:warnings"
@@ -138,4 +138,4 @@ select = [
     "W",  # pycodestyle warnings
     "UP", # pyupgrade
 ]
-target-version = "py311"
+target-version = "py312"

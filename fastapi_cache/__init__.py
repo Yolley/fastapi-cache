@@ -2,6 +2,7 @@ from importlib.metadata import version
 from typing import ClassVar
 
 from fastapi_cache.coder import Coder, JsonCoder
+from fastapi_cache.context import get_cache_ctx
 from fastapi_cache.key_builder import default_key_builder
 from fastapi_cache.types import Backend, KeyBuilder
 
@@ -13,6 +14,7 @@ __all__ = [
     "JsonCoder",
     "KeyBuilder",
     "default_key_builder",
+    "get_cache_ctx",
 ]
 
 
@@ -93,9 +95,7 @@ class FastAPICache:
         return cls._enable
 
     @classmethod
-    async def clear(
-        cls, namespace: str | None = None, key: str | None = None
-    ) -> int:
+    async def clear(cls, namespace: str | None = None, key: str | None = None) -> int:
         assert (  # noqa: S101
             cls._backend and cls._prefix is not None
         ), "You must call init first!"

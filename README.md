@@ -14,6 +14,7 @@ backends supporting Redis, Memcached, and Amazon DynamoDB.
 - Supports `redis`, `memcache`, `dynamodb`, and `in-memory` backends.
 - Easy integration with [FastAPI](https://fastapi.tiangolo.com/).
 - Support for HTTP cache headers like `ETag` and `Cache-Control`, as well as conditional `If-Match-None` requests.
+- Have an optional Cache Context available during function call, that can be acquired with `get_cache_ctx` function.
 
 ## Requirements
 
@@ -211,6 +212,67 @@ def request_key_builder(
 async def index():
     return dict(hello="world")
 ```
+
+### Cache Context
+
+You can fetch current cache context with `get_cache_ctx` function. It returns a mutable mapping of type `CacheCtx` and has all caching parameters along with some variables set during cache initialisation.
+
+This context can be used to override some caching variables if they depend on the function context:
+
+```python
+from fastapi_cache import FastAPICache, get_cache_ctx
+
+@app.get("/")
+@cache(namespace="test")
+async def cache_with_ctx(new_expire: int):
+    ctx = get_cache_ctx()
+
+    # override expiration with the provided value
+    ctx["expire"] = new_expire
+    return {"result": 42}
+```
+
+### Using Locks with Cache
+
+The `with_lock` parameter can be used to prevent multiple concurrent executions of computationally expensive functions. When enabled, if multiple requests try to access the same uncached endpoint simultaneously, only the first request will execute the function while others wait for the result to be cached. This is particularly useful for:
+
+1. Preventing the "thundering herd" problem where multiple requests execute the same expensive operation simultaneously
+2. Reducing database load by ensuring only one request computes a result
+3. Improving response times for concurrent requests to uncached endpoints
+
+Currently, lock functionality is available only with `inmemory` and `redis` backends.
+
+Here's an example of using `with_lock` for a computationally expensive operation:
+
+```python
+import asyncio
+import time
+from fastapi import FastAPI
+from fastapi_cache.decorator import cache
+
+app = FastAPI()
+
+@app.get("/expensive-operation")
+@cache(namespace="heavy_computation", with_lock=True, lock_timeout=30)
+async def expensive_operation():
+    # Simulate a heavy computation
+    print("Starting expensive operation...")
+
+    # This could be a database query, ML model inference, or any heavy computation
+    await asyncio.sleep(5)  # Simulating 5 seconds of processing
+
+    result = {"data": "Expensive computation result", "timestamp": time.time()}
+    print("Expensive operation completed")
+
+    return result
+```
+
+In this example:
+- `with_lock=True` ensures that if multiple concurrent requests hit this endpoint, only one will execute the function
+- `lock_timeout=30` sets a maximum lock time of 30 seconds to prevent deadlocks
+- After the first request completes, the result is cached and subsequent requests will get the cached result immediately
+
+Without the lock, if 10 concurrent requests hit an uncached endpoint, all 10 would execute the expensive operation simultaneously. With the lock, only one request executes the operation while the other 9 wait for the result to be cached.
 
 ## Backend notes
 
