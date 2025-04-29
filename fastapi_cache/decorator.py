@@ -267,8 +267,8 @@ class CachedFunc(Generic[P, R]):
 
         backend = FastAPICache.get_backend()
 
-        ttl, cached = await _get_cached(backend, cache_key)
-        if not no_cache and cached is not None:
+        ttl, cached = (None, None) if no_cache else await _get_cached(backend, cache_key)
+        if cached is not None:
             return cached, ttl, True
 
         if ctx["with_lock"]:
@@ -278,6 +278,7 @@ class CachedFunc(Generic[P, R]):
 
         async with lock:
             if not no_cache and ctx["with_lock"]:
+                # fetch cached one more time with lock, could be that the value have been cached already
                 ttl, cached = await _get_cached(backend, cache_key)
                 if cached is not None:
                     return cached, ttl, True

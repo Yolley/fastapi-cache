@@ -1,6 +1,6 @@
 [project]
 name = "fastapi-cache2-fork"
-version = "1.0.0"
+version = "1.0.1"
 description = "Cache for FastAPI. An opinionated fork of fastapi-cache library that uses msgspec for json encoding/decoding where possible"
 authors = [
     { name = "long2ice", email = "long2ice@gmail.com" },
@@ -53,7 +53,7 @@ dev = [
 linting = [
     "mypy>=1.5.1,<2",
     "pyright>=1.1.306,<2",
-    "ruff>=0.1.5,<0.2",
+    "ruff>=0.11.7,<1",
     "types-aiobotocore[dynamodb]>=2.7.0,<3",
     "types-redis>=4.6.0.10,<5",
 ]
@@ -126,8 +126,10 @@ pythonVersion = "3.12"
 addopts = "-p no:warnings"
 
 [tool.ruff]
-ignore = ["E501"]
 line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
 select = [
     "B",  # flake8-bugbear
     "C4", # flake8-comprehensions
@@ -138,4 +140,4 @@ select = [
     "W",  # pycodestyle warnings
     "UP", # pyupgrade
 ]
-target-version = "py312"
+ignore = ["E501"]
