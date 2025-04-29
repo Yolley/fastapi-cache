@@ -17,7 +17,7 @@ from starlette.templating import (
     _TemplateResponse as TemplateResponse,  # pyright: ignore[reportPrivateUsage]
 )
 
-from fastapi_cache.types import is_subclass_safe
+from fastapi_cache.helpers.typing import is_subclass_safe
 
 T = TypeVar("T")
 
@@ -64,13 +64,11 @@ class Coder:
 
     @overload
     @classmethod
-    def decode_as_type(cls, value: bytes, *, type_: type[T]) -> T:
-        ...
+    def decode_as_type(cls, value: bytes, *, type_: type[T]) -> T: ...
 
     @overload
     @classmethod
-    def decode_as_type(cls, value: bytes, *, type_: None) -> Any:
-        ...
+    def decode_as_type(cls, value: bytes, *, type_: None) -> Any: ...
 
     @classmethod
     def decode_as_type(cls, value: bytes, *, type_: type[T] | None) -> T | Any:

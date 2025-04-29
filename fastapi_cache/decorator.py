@@ -29,7 +29,7 @@ from starlette.status import HTTP_304_NOT_MODIFIED
 from fastapi_cache import Backend, FastAPICache
 from fastapi_cache.coder import Coder
 from fastapi_cache.context import CacheCtx, CacheCtxWithOptional, cache_ctx_var
-from fastapi_cache.types import KeyBuilder
+from fastapi_cache.types import UNDEFINED, KeyBuilder, Undefined
 
 logger: logging.Logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -37,13 +37,6 @@ P = ParamSpec("P")
 R = TypeVar("R")
 # According to [RFC 2616](https://www.ietf.org/rfc/rfc2616.txt)
 MAX_AGE_NEVER_EXPIRES = 31536000
-
-
-class Undefined:
-    pass
-
-
-UNDEFINED = Undefined()
 
 
 def _augment_signature(signature: Signature, *extra: Parameter) -> Signature:
@@ -114,61 +107,7 @@ def _get_max_age(ttl: int | None) -> int:
     return ttl
 
 
-def cache(
-    expire: int | None | Undefined = UNDEFINED,
-    coder: type[Coder] | Undefined = UNDEFINED,
-    key_builder: KeyBuilder | Undefined = UNDEFINED,
-    namespace: str = "",
-    with_lock: bool = False,
-    lock_timeout: int = 60,
-    bypass_cache_control: bool = False,
-    injected_dependency_namespace: str = "__fastapi_cache",
-) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
-    """
-    cache-all function
-    :param injected_dependency_namespace:
-    :param namespace:
-    :param expire:
-    :param coder:
-    :param key_builder:
-    :param with_lock:
-    :param lock_timeout:
-    :param bypass_cache_control
-
-    :return:
-    """
-
-    injected_request = Parameter(
-        name=f"{injected_dependency_namespace}_request",
-        annotation=Request,
-        kind=Parameter.KEYWORD_ONLY,
-    )
-    injected_response = Parameter(
-        name=f"{injected_dependency_namespace}_response",
-        annotation=Response,
-        kind=Parameter.KEYWORD_ONLY,
-    )
-
-    ctx: CacheCtxWithOptional = {
-        "namespace": namespace,
-        "with_lock": with_lock,
-        "lock_timeout": lock_timeout,
-        "bypass_cache_control": bypass_cache_control,
-        "injected_request": injected_request,
-        "injected_response": injected_response,
-    }
-
-    if not isinstance(key_builder, Undefined):
-        ctx["key_builder"] = key_builder
-    if not isinstance(expire, Undefined):
-        ctx["expire"] = expire
-    if not isinstance(coder, Undefined):
-        ctx["coder"] = coder
-
-    return partial(CachedFunc, ctx)  # type: ignore[return-value]
-
-
-class CachedFunc(Generic[P, R]):
+class Cached(Generic[P, R]):
     def __init__(
         self,
         ctx: CacheCtxWithOptional,
@@ -259,10 +198,6 @@ class CachedFunc(Generic[P, R]):
     ) -> tuple[R, int | None, Literal[False]] | tuple[Any, int | None, Literal[True]]:
         """Get the cached value or call the function if not cached."""
 
-        try:
-            print(cache_ctx_var.get())
-        except LookupError:
-            pass
         ctx = self.get_ctx()
 
         backend = FastAPICache.get_backend()
@@ -289,14 +224,14 @@ class CachedFunc(Generic[P, R]):
             return result, ctx["expire"], False
 
     @overload
-    def build_cached_result(self, cached: Any, ttl: int | None, headers: Headers | dict[str, str], response: None) -> R:
-        ...
+    def build_cached_result(
+        self, cached: Any, ttl: int | None, headers: Headers | dict[str, str], response: None
+    ) -> R: ...
 
     @overload
     def build_cached_result(
         self, cached: Any, ttl: int | None, headers: Headers | dict[str, str], response: Response
-    ) -> Response:
-        ...
+    ) -> Response: ...
 
     def build_cached_result(
         self, cached: Any, ttl: int | None, headers: Headers | dict[str, str], response: Response | None
@@ -388,3 +323,57 @@ class CachedFunc(Generic[P, R]):
             )
 
         return result
+
+
+def cache(
+    expire: int | None | Undefined = UNDEFINED,
+    coder: type[Coder] | Undefined = UNDEFINED,
+    key_builder: KeyBuilder | Undefined = UNDEFINED,
+    namespace: str = "",
+    with_lock: bool = False,
+    lock_timeout: int = 60,
+    bypass_cache_control: bool = False,
+    injected_dependency_namespace: str = "__fastapi_cache",
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
+    """
+    cache-all function
+    :param injected_dependency_namespace:
+    :param namespace:
+    :param expire:
+    :param coder:
+    :param key_builder:
+    :param with_lock:
+    :param lock_timeout:
+    :param bypass_cache_control
+
+    :return:
+    """
+
+    injected_request = Parameter(
+        name=f"{injected_dependency_namespace}_request",
+        annotation=Request,
+        kind=Parameter.KEYWORD_ONLY,
+    )
+    injected_response = Parameter(
+        name=f"{injected_dependency_namespace}_response",
+        annotation=Response,
+        kind=Parameter.KEYWORD_ONLY,
+    )
+
+    ctx: CacheCtxWithOptional = {
+        "namespace": namespace,
+        "with_lock": with_lock,
+        "lock_timeout": lock_timeout,
+        "bypass_cache_control": bypass_cache_control,
+        "injected_request": injected_request,
+        "injected_response": injected_response,
+    }
+
+    if not isinstance(key_builder, Undefined):
+        ctx["key_builder"] = key_builder
+    if not isinstance(expire, Undefined):
+        ctx["expire"] = expire
+    if not isinstance(coder, Undefined):
+        ctx["coder"] = coder
+
+    return partial(Cached, ctx)  # type: ignore[return-value]

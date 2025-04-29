@@ -31,12 +31,8 @@ class PDItem(BaseModel):
         (1, 2),
         [1, 2, 3],
         {"some_key": 1, "other_key": 2},
-        DCItem(
-            name="foo", price=42.0, description="some dataclass item", tax=0.2
-        ),
-        PDItem(
-            name="foo", price=42.0, description="some pydantic item", tax=0.2
-        ),
+        DCItem(name="foo", price=42.0, description="some dataclass item", tax=0.2),
+        PDItem(name="foo", price=42.0, description="some pydantic item", tax=0.2),
     ],
 )
 def test_pickle_coder(value: Any) -> None:
@@ -76,7 +72,6 @@ def test_pickle_coder(value: Any) -> None:
 )
 def test_json_coder(value: Any, return_type: type[Any]) -> None:
     encoded_value = JsonCoder.encode(value)
-    print(encoded_value)
     assert isinstance(encoded_value, bytes)
     decoded_value = JsonCoder.decode_as_type(encoded_value, type_=return_type)
     assert decoded_value == value
