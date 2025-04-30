@@ -10,6 +10,12 @@ This project uses [git-cliff](https://git-cliff.org/).
 
 ### 🚀 Features
 
+- Support various options to clear redis cache by namespace
+
+## [2.0.0] - 2025-04-30
+
+### 🚀 Features
+
 - [**breaking**] Switch to msgspec as context container
 
 ### 💼 Other
