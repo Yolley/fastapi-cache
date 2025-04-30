@@ -6,12 +6,13 @@ from contextlib import asynccontextmanager
 import pendulum
 import uvicorn
 from fastapi import FastAPI
-from fastapi_cache import FastAPICache, get_cache_ctx
-from fastapi_cache.backends.inmemory import InMemoryBackend
-from fastapi_cache.decorator import cache
 from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+
+from fastapi_cache import FastAPICache, get_cache_ctx
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.decorator import cache
 
 
 @asynccontextmanager
@@ -167,7 +168,7 @@ async def cached_with_ctx(update_expire: bool = True):
 
     ctx = get_cache_ctx()
     if update_expire:
-        ctx["expire"] = 3_600
+        ctx.expire = 3_600
     put_ret5 = put_ret5 + 1
     return {"value": put_ret5}
 

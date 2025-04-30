@@ -1,11 +1,8 @@
 import logging
-import typing
 from collections.abc import Awaitable, Callable, Generator
 from contextlib import AsyncExitStack, contextmanager
-from contextvars import Token
-from functools import partial, update_wrapper
+from functools import cached_property, partial, update_wrapper
 from inspect import Parameter, Signature, isawaitable, iscoroutinefunction, markcoroutinefunction
-from types import MappingProxyType
 from typing import (
     Any,
     Generic,
@@ -16,11 +13,13 @@ from typing import (
     overload,
 )
 
+import msgspec
 from fastapi.concurrency import run_in_threadpool
 from fastapi.dependencies.utils import (
     get_typed_return_annotation,
     get_typed_signature,
 )
+from msgspec import UNSET, UnsetType
 from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import Response
@@ -28,8 +27,8 @@ from starlette.status import HTTP_304_NOT_MODIFIED
 
 from fastapi_cache import Backend, FastAPICache
 from fastapi_cache.coder import Coder
-from fastapi_cache.context import CacheCtx, CacheCtxWithOptional, cache_ctx_var
-from fastapi_cache.types import UNDEFINED, KeyBuilder, Undefined
+from fastapi_cache.context import CacheCtx, CacheCtxFrozen, CacheCtxWithOptional, cache_ctx_var
+from fastapi_cache.types import KeyBuilder
 
 logger: logging.Logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -40,6 +39,7 @@ MAX_AGE_NEVER_EXPIRES = 31536000
 
 
 def _augment_signature(signature: Signature, *extra: Parameter) -> Signature:
+    """Add extra parameters to the function signature."""
     if not extra:
         return signature
 
@@ -54,8 +54,7 @@ def _augment_signature(signature: Signature, *extra: Parameter) -> Signature:
 def _locate_param(sig: Signature, dep: Parameter, to_inject: list[Parameter]) -> Parameter:
     """Locate an existing parameter in the decorated endpoint
 
-    If not found, returns the injectable parameter, and adds it to the to_inject list.
-
+    If not found, returns the injectable parameter and adds it to the to_inject list.
     """
     param = next(
         (p for p in sig.parameters.values() if p.annotation is dep.annotation),
@@ -86,11 +85,13 @@ def _uncacheable(request: Request | None, bypass_cache_control: bool) -> bool:
 
 
 async def _get_cached(backend: Backend, cache_key: str) -> tuple[int, Any]:
+    """Get the cached value for a given cache key from the backend.."""
     try:
         ttl, cached = await backend.get_with_ttl(cache_key)
     except Exception:
         logger.warning(
-            f"Error retrieving cache key '{cache_key}' from backend:",
+            "Error retrieving cache key '%s' from backend:",
+            cache_key,
             exc_info=True,
         )
         ttl, cached = 0, None
@@ -116,19 +117,16 @@ class Cached(Generic[P, R]):
         wrapped_signature = get_typed_signature(func)
 
         to_inject: list[Parameter] = []
-        self.request_param = _locate_param(wrapped_signature, ctx["injected_request"], to_inject)
-        self.response_param = _locate_param(wrapped_signature, ctx["injected_response"], to_inject)
+        self.request_param = _locate_param(wrapped_signature, ctx.injected_request, to_inject)
+        self.response_param = _locate_param(wrapped_signature, ctx.injected_response, to_inject)
         self.return_type = get_typed_return_annotation(func)
 
-        self._ctx = MappingProxyType(ctx)
-        self._is_ctx_set = False
+        self._initial_ctx = ctx
         self.func = func
 
         update_wrapper(self, func)
         markcoroutinefunction(self)
         self.__signature__ = _augment_signature(wrapped_signature, *to_inject)
-
-        self.__ctx_token: Token[CacheCtx] | None = None
 
     async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         with self.cache_ctx_cycle():
@@ -136,34 +134,32 @@ class Cached(Generic[P, R]):
 
     @contextmanager
     def cache_ctx_cycle(self) -> Generator[None, None, None]:
+        """Context manager to set/reset the cache context."""
         ctx = self.get_local_ctx()
         token = cache_ctx_var.set(ctx)
         yield
         cache_ctx_var.reset(token)
 
-    @property
-    def global_ctx(self) -> CacheCtx:
+    @cached_property
+    def global_ctx(self) -> CacheCtxFrozen:
         """Cache will be set on the first function call.
 
         Useful when the decorator is executed before Cache is instantiated."""
-
-        if self._is_ctx_set:
-            return typing.cast(CacheCtx, self._ctx)  # pyright: ignore[reportUnknownMemberType]
-        ctx = typing.cast(CacheCtx, dict(self._ctx))  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
-        ctx.setdefault("coder", FastAPICache.get_coder())
-        ctx.setdefault("expire", FastAPICache.get_expire())
-        ctx.setdefault("key_builder", FastAPICache.get_key_builder())
-        self._ctx = MappingProxyType(ctx)
-        self._is_ctx_set = True
-        return self.global_ctx
+        ctx = self._initial_ctx
+        if isinstance(ctx.coder, UnsetType):
+            ctx.coder = FastAPICache.get_coder()
+        if isinstance(ctx.expire, UnsetType):
+            ctx.expire = FastAPICache.get_expire()
+        if isinstance(ctx.key_builder, UnsetType):
+            ctx.key_builder = FastAPICache.get_key_builder()
+        return msgspec.convert(ctx, type=CacheCtxFrozen)
 
     def get_local_ctx(self) -> CacheCtx:
-        return typing.cast(CacheCtx, dict(self.global_ctx))
+        """Fetch mutable context to be used locally."""
+        return msgspec.convert(self.global_ctx, type=CacheCtx, from_attributes=True)
 
     def get_ctx(self) -> CacheCtx:
-        """Returns either a global context or a local one.
-
-        Local context should be set only if we actually call the `func`."""
+        """Returns either a global context or a local one."""
 
         try:
             return cache_ctx_var.get()
@@ -177,8 +173,8 @@ class Cached(Generic[P, R]):
         # if the wrapped function does NOT have a request or response in
         # its function signature, make sure we don't pass them in as
         # keyword arguments
-        kwargs.pop(ctx["injected_request"].name, None)
-        kwargs.pop(ctx["injected_response"].name, None)
+        kwargs.pop(ctx.injected_request.name, None)
+        kwargs.pop(ctx.injected_response.name, None)
 
         if iscoroutinefunction(self.func):
             # async, return as is.
@@ -191,7 +187,11 @@ class Cached(Generic[P, R]):
         return await run_in_threadpool(self.func, *args, **kwargs)  # type: ignore[arg-type]
 
     async def get_cached_or_call(
-        self, cache_key: str, no_cache: bool, *args: P.args, **kwargs: P.kwargs
+        self,
+        cache_key: str,
+        no_cache: bool,
+        *args: P.args,
+        **kwargs: P.kwargs,
     ) -> tuple[R, int | None, Literal[False]] | tuple[Any, int | None, Literal[True]]:
         """Get the cached value or call the function if not cached."""
 
@@ -203,13 +203,10 @@ class Cached(Generic[P, R]):
         if cached is not None:
             return cached, ttl, True
 
-        if ctx["with_lock"]:
-            lock = backend.lock(cache_key, ctx["lock_timeout"])
-        else:
-            lock = AsyncExitStack()
+        lock = backend.lock(cache_key, ctx.lock_timeout) if ctx.with_lock else AsyncExitStack()
 
         async with lock:
-            if not no_cache and ctx["with_lock"]:
+            if not no_cache and ctx.with_lock:
                 # fetch cached one more time with lock, could be that the value have been cached already
                 ttl, cached = await _get_cached(backend, cache_key)
                 if cached is not None:
@@ -218,21 +215,45 @@ class Cached(Generic[P, R]):
             result = await self.ensure_async_func(*args, **kwargs)
             ctx = self.get_ctx()
 
-            return result, ctx["expire"], False
+            return result, ctx.expire, False
 
     @overload
     def build_cached_result(
-        self, cached: Any, ttl: int | None, headers: Headers | dict[str, str], response: None
+        self,
+        cached: Any,
+        ttl: int | None,
+        headers: Headers | dict[str, str],
+        response: None,
     ) -> R: ...
 
     @overload
     def build_cached_result(
-        self, cached: Any, ttl: int | None, headers: Headers | dict[str, str], response: Response
+        self,
+        cached: Any,
+        ttl: int | None,
+        headers: Headers | dict[str, str],
+        response: Response,
     ) -> Response: ...
 
     def build_cached_result(
-        self, cached: Any, ttl: int | None, headers: Headers | dict[str, str], response: Response | None
+        self,
+        cached: Any,
+        ttl: int | None,
+        headers: Headers | dict[str, str],
+        response: Response | None,
     ) -> R | Response:
+        """
+            Decodes a cached value and either returns a `Response` or the decoded value.
+
+        Args:
+            cached: encoded value fetched from the `backend`.
+            ttl: expiration of the cached value.
+            headers: initial request headers.
+            response: response object.
+
+        Returns:
+            `Response` in case a response instance was passed, otherwise decoded value.
+        """
         cache_status_header = FastAPICache.get_cache_status_header()
 
         etag = f"W/{hash(cached)}"
@@ -242,13 +263,13 @@ class Cached(Generic[P, R]):
                     "Cache-Control": f"max-age={ttl}",
                     "ETag": etag,
                     cache_status_header: "HIT",
-                }
+                },
             )
 
             response.status_code = HTTP_304_NOT_MODIFIED
             return response
 
-        cached_decoded = cast(R, self.global_ctx["coder"].decode_as_type(cached, type_=self.return_type))
+        cached_decoded = cast("R", self.global_ctx.coder.decode_as_type(cached, type_=self.return_type))
         if isinstance(cached_decoded, Response):
             response = cached_decoded
 
@@ -258,29 +279,30 @@ class Cached(Generic[P, R]):
                     "Cache-Control": f"max-age={_get_max_age(ttl)}",
                     "ETag": etag,
                     cache_status_header: "HIT",
-                }
+                },
             )
         return cached_decoded
 
     async def inner(self, *args: P.args, **kwargs: P.kwargs) -> R | Response:
+        """Actual cached function wrapper."""
         ctx = self.get_ctx()
 
         copy_kwargs = kwargs.copy()
         request: Request | None = copy_kwargs.pop(self.request_param.name, None)  # type: ignore[assignment]
         response: Response | None = copy_kwargs.pop(self.response_param.name, None)  # type: ignore[assignment]
 
-        if _uncacheable(request, ctx["bypass_cache_control"]):
+        if _uncacheable(request, ctx.bypass_cache_control):
             return await self.ensure_async_func(*args, **kwargs)
 
         headers: Headers | dict[str, str] = request.headers if request else {}
-        no_cache = not ctx["bypass_cache_control"] and headers.get("Cache-Control") == "no-cache"
+        no_cache = not ctx.bypass_cache_control and headers.get("Cache-Control") == "no-cache"
         prefix = FastAPICache.get_prefix()
         backend = FastAPICache.get_backend()
         cache_status_header = FastAPICache.get_cache_status_header()
 
-        cache_key = ctx["key_builder"](
+        cache_key = ctx.key_builder(
             self.func,
-            f"{prefix}:{ctx['namespace']}",
+            f"{prefix}:{ctx.namespace}",
             request=request,
             response=response,
             args=args,
@@ -288,7 +310,8 @@ class Cached(Generic[P, R]):
         )
         if isawaitable(cache_key):
             cache_key = await cache_key
-        assert isinstance(cache_key, str)  # noqa: S101 # assertion is a type guard
+        if not isinstance(cache_key, str):
+            raise RuntimeError("Invalid cache key returned. Expected str, got: ", type(cache_key))
 
         result, ttl, from_cache = await self.get_cached_or_call(cache_key, no_cache, *args, **kwargs)
 
@@ -296,7 +319,7 @@ class Cached(Generic[P, R]):
             return self.build_cached_result(result, ttl, headers, response)
 
         ctx = self.get_ctx()
-        to_cache = ctx["coder"].encode(result)
+        to_cache = ctx.coder.encode(result)
 
         try:
             await backend.set(cache_key, to_cache, ttl)
@@ -316,34 +339,36 @@ class Cached(Generic[P, R]):
                     "Cache-Control": f"max-age={_get_max_age(ttl)}",
                     "ETag": f"W/{hash(to_cache)}",
                     cache_status_header: "MISS",
-                }
+                },
             )
 
         return result
 
 
 def cache(
-    expire: int | None | Undefined = UNDEFINED,
-    coder: type[Coder] | Undefined = UNDEFINED,
-    key_builder: KeyBuilder | Undefined = UNDEFINED,
+    expire: int | None | UnsetType = UNSET,
+    coder: type[Coder] | UnsetType = UNSET,
+    key_builder: KeyBuilder | UnsetType = UNSET,
     namespace: str = "",
     with_lock: bool = False,
     lock_timeout: int = 60,
     bypass_cache_control: bool = False,
     injected_dependency_namespace: str = "__fastapi_cache",
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
-    """
-    cache-all function
-    :param injected_dependency_namespace:
-    :param namespace:
-    :param expire:
-    :param coder:
-    :param key_builder:
-    :param with_lock:
-    :param lock_timeout:
-    :param bypass_cache_control
+    """Cache-all function.
 
-    :return:
+    Args:
+        injected_dependency_namespace: namespace to use for injecting the request and response dependencies.
+        namespace: cache namespace to use when building cache keys.
+        expire: time to live for the cached value, defaults to the global expiry.
+        coder: coder to use to encode/decode the cached value, defaults to the global coder.
+        key_builder: function to build the cache key, defaults to the global key builder.
+        with_lock: whether to use a lock when fetching/setting the cache value.
+        lock_timeout: timeout for the lock, defaults to 60 seconds.
+        bypass_cache_control: whether to bypass the cache control headers.
+
+    Returns:
+        Wrapped function
     """
 
     injected_request = Parameter(
@@ -357,20 +382,20 @@ def cache(
         kind=Parameter.KEYWORD_ONLY,
     )
 
-    ctx: CacheCtxWithOptional = {
-        "namespace": namespace,
-        "with_lock": with_lock,
-        "lock_timeout": lock_timeout,
-        "bypass_cache_control": bypass_cache_control,
-        "injected_request": injected_request,
-        "injected_response": injected_response,
-    }
+    ctx: CacheCtxWithOptional = CacheCtxWithOptional(
+        namespace=namespace,
+        with_lock=with_lock,
+        lock_timeout=lock_timeout,
+        bypass_cache_control=bypass_cache_control,
+        injected_request=injected_request,
+        injected_response=injected_response,
+    )
 
-    if not isinstance(key_builder, Undefined):
-        ctx["key_builder"] = key_builder
-    if not isinstance(expire, Undefined):
-        ctx["expire"] = expire
-    if not isinstance(coder, Undefined):
-        ctx["coder"] = coder
+    if not isinstance(key_builder, UnsetType):
+        ctx.key_builder = key_builder
+    if not isinstance(expire, UnsetType):
+        ctx.expire = expire
+    if not isinstance(coder, UnsetType):
+        ctx.coder = coder
 
     return partial(Cached, ctx)  # type: ignore[return-value]

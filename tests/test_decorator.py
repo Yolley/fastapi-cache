@@ -1,5 +1,4 @@
 import asyncio
-import time
 from unittest import mock
 
 import pendulum
@@ -20,7 +19,7 @@ async def test_datetime(client: AsyncClient) -> None:
     assert response.headers.get("X-FastAPI-Cache") == "HIT"
     now = response.json().get("now")
     assert pendulum.parse(now).replace(microsecond=0) == now_  # type: ignore[union-attr, call-arg]
-    time.sleep(3)
+    await asyncio.sleep(3)
     response = await client.get("/datetime")
     now = response.json().get("now")
     assert response.headers.get("X-FastAPI-Cache") == "MISS"

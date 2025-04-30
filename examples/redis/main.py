@@ -10,14 +10,14 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi_cache import FastAPICache, get_cache_ctx
-from fastapi_cache.backends.redis import RedisBackend
-from fastapi_cache.coder import PickleCoder
-from fastapi_cache.decorator import cache
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 import redis.asyncio as redis
+from fastapi_cache import FastAPICache, get_cache_ctx
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.coder import PickleCoder
+from fastapi_cache.decorator import cache
 from redis.asyncio.connection import ConnectionPool
 
 
@@ -99,7 +99,7 @@ async def cache_with_lock():
 async def cache_with_ctx():
     ctx = get_cache_ctx()
 
-    ctx["expire"] = 300
+    ctx.expire = 300
     return {"result": 42}
 
 

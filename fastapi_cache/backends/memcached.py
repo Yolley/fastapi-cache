@@ -1,11 +1,13 @@
-
-from aiomcache import Client
+from typing import TYPE_CHECKING
 
 from fastapi_cache.types import Backend
 
+if TYPE_CHECKING:
+    from aiomcache import Client
+
 
 class MemcachedBackend(Backend):
-    def __init__(self, mcache: Client):
+    def __init__(self, mcache: "Client"):
         self.mcache = mcache
 
     async def get_with_ttl(self, key: str) -> tuple[int, bytes | None]:

@@ -1,12 +1,13 @@
 from contextvars import ContextVar
 from inspect import Parameter
-from typing import NotRequired, TypedDict
+
+from msgspec import UNSET, Struct, UnsetType
 
 from fastapi_cache.coder import Coder
 from fastapi_cache.types import KeyBuilder
 
 
-class CacheCtxCommon(TypedDict):
+class CacheCtxCommon(Struct):
     namespace: str
     with_lock: bool
     lock_timeout: int
@@ -16,10 +17,10 @@ class CacheCtxCommon(TypedDict):
 
 
 class CacheCtxWithOptional(CacheCtxCommon):
-    prefix: NotRequired[str]
-    expire: NotRequired[int | None]
-    coder: NotRequired[type[Coder]]
-    key_builder: NotRequired[KeyBuilder]
+    prefix: str | UnsetType = UNSET
+    expire: int | None | UnsetType = UNSET
+    coder: type[Coder] | UnsetType = UNSET
+    key_builder: KeyBuilder | UnsetType = UNSET
 
 
 class CacheCtx(CacheCtxCommon):
@@ -27,6 +28,10 @@ class CacheCtx(CacheCtxCommon):
     expire: int | None
     coder: type[Coder]
     key_builder: KeyBuilder
+
+
+class CacheCtxFrozen(CacheCtx, frozen=True):  # type: ignore[misc]
+    pass
 
 
 cache_ctx_var: ContextVar[CacheCtx] = ContextVar("cache_ctx")

@@ -3,7 +3,7 @@ import time
 from collections.abc import AsyncGenerator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from fastapi_cache.types import Backend
 
@@ -15,8 +15,8 @@ class Value:
 
 
 class InMemoryBackend(Backend):
-    _store: dict[str, Value] = {}
-    _locks: dict[str, asyncio.Lock] = {}
+    _store: ClassVar[dict[str, Value]] = {}
+    _locks: ClassVar[dict[str, asyncio.Lock]] = {}
     _check_lock = asyncio.Lock()
 
     @asynccontextmanager
