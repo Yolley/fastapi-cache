@@ -152,7 +152,7 @@ class Cached(Generic[P, R]):
             ctx.expire = FastAPICache.get_expire()
         if isinstance(ctx.key_builder, UnsetType):
             ctx.key_builder = FastAPICache.get_key_builder()
-        return msgspec.convert(ctx, type=CacheCtxFrozen)
+        return msgspec.convert(ctx, type=CacheCtxFrozen, from_attributes=True)
 
     def get_local_ctx(self) -> CacheCtx:
         """Fetch mutable context to be used locally."""

@@ -1,5 +1,5 @@
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 _Func = Callable[..., Any]
 
 
+@runtime_checkable
 class KeyBuilder(Protocol):
     def __call__(
         self,

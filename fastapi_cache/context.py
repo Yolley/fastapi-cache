@@ -17,14 +17,12 @@ class CacheCtxCommon(Struct):
 
 
 class CacheCtxWithOptional(CacheCtxCommon):
-    prefix: str | UnsetType = UNSET
     expire: int | None | UnsetType = UNSET
     coder: type[Coder] | UnsetType = UNSET
     key_builder: KeyBuilder | UnsetType = UNSET
 
 
 class CacheCtx(CacheCtxCommon):
-    prefix: str
     expire: int | None
     coder: type[Coder]
     key_builder: KeyBuilder
