@@ -96,6 +96,7 @@ jobs:
     name: Update CHANGELOG.md
     runs-on: ubuntu-latest
     needs: [ build ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,13 +114,13 @@ jobs:
 
       - name: Commit
         run: |
-          git checkout <branch>
+          git checkout ${{ github.ref_name }}
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           set +e
           git add CHANGELOG.md
           git commit -m "chore(changelog): Update changelog"
-          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git <branch>
+          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git ${{ github.ref_name }}
 
   publish:
     name: Build and publish Python 🐍 distributions 📦 to PyPI
