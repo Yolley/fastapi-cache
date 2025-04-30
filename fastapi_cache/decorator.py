@@ -310,8 +310,6 @@ class Cached(Generic[P, R]):
         )
         if isawaitable(cache_key):
             cache_key = await cache_key
-        if not isinstance(cache_key, str):
-            raise RuntimeError("Invalid cache key returned. Expected str, got: ", type(cache_key))
 
         result, ttl, from_cache = await self.get_cached_or_call(cache_key, no_cache, *args, **kwargs)
 
