@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 This project uses [git-cliff](https://git-cliff.org/).
 
+## [unreleased]
+
+### 🚀 Features
+
+- [**breaking**] Switch to msgspec as context container
+
+### 💼 Other
+
+- V2 (#2)
+- * refactor: add additional ruff linting rules
+- * refactor: move annotation only imports to `TYPE_CHECKING` block
+
 ## [1.0.3] - 2025-04-29
 
 ### 💼 Other
