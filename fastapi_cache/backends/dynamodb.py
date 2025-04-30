@@ -1,15 +1,12 @@
 import datetime
 from typing import TYPE_CHECKING
 
-from aiobotocore.client import AioBaseClient
 from aiobotocore.session import AioSession, get_session
 
 from fastapi_cache.types import Backend
 
 if TYPE_CHECKING:
     from types_aiobotocore_dynamodb import DynamoDBClient
-else:
-    DynamoDBClient = AioBaseClient
 
 
 class DynamoBackend(Backend):
@@ -41,14 +38,15 @@ class DynamoBackend(Backend):
         self._client: DynamoDBClient | None = None
 
     @property
-    def client(self) -> DynamoDBClient:
+    def client(self) -> "DynamoDBClient":
         if not self._client:
             raise Exception("Backend not initiated!")
         return self._client
 
     async def init(self) -> None:
         self._client = await self.session.create_client(  # pyright: ignore[reportUnknownMemberType]
-            "dynamodb", region_name=self.region
+            "dynamodb",
+            region_name=self.region,
         ).__aenter__()
 
     async def close(self) -> None:
@@ -88,10 +86,8 @@ class DynamoBackend(Backend):
         await self.client.put_item(
             TableName=self.table_name,
             Item={
-                **{
-                    "key": {"S": key},
-                    "value": {"B": value},
-                },
+                "key": {"S": key},
+                "value": {"B": value},
                 **ttl,
             },
         )

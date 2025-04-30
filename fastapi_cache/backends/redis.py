@@ -1,11 +1,15 @@
-from contextlib import AbstractAsyncContextManager
 from functools import cached_property
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
 
-from redis.asyncio import Redis, RedisCluster
+from redis.asyncio import RedisCluster
 from redis.asyncio.lock import Lock
 
 from fastapi_cache.types import Backend
+
+if TYPE_CHECKING:
+    from contextlib import AbstractAsyncContextManager
+
+    from redis.asyncio import Redis
 
 
 class RedisBackend(Backend):
@@ -45,7 +49,7 @@ class RedisBackend(Backend):
     async def set(self, key: str, value: bytes, expire: int | None = None) -> None:
         await self.redis_write.set(key, value, ex=expire)
 
-    def lock(self, key: str, timeout: int) -> AbstractAsyncContextManager[Any]:
+    def lock(self, key: str, timeout: int) -> "AbstractAsyncContextManager[Any]":
         lock_key = f"{key}::lock"
 
         return Lock(self.redis_write, lock_key, timeout=timeout)
