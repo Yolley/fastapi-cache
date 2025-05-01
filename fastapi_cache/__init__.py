@@ -32,7 +32,7 @@ class FastAPICache:
     def init(
         cls,
         backend: Backend,
-        prefix: str = "",
+        prefix: str = "fcache",
         expire: int | None = None,
         coder: type[Coder] = JsonCoder,
         key_builder: KeyBuilder = default_key_builder,
