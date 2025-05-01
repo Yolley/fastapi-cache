@@ -10,6 +10,12 @@ This project uses [git-cliff](https://git-cliff.org/).
 
 ### 🚀 Features
 
+- Add default prefix to differentiate cache keys
+
+## [2.1.0] - 2025-04-30
+
+### 🚀 Features
+
 - Support various options to clear redis cache by namespace
 
 ## [2.0.0] - 2025-04-30
