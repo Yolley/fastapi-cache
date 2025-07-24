@@ -1,6 +1,6 @@
 [project]
 name = "fastapi-cache2-fork"
-version = "2.2.0"
+version = "2.2.1"
 description = "Cache for FastAPI. An opinionated fork of fastapi-cache library that uses msgspec for json encoding/decoding where possible"
 authors = [
     { name = "long2ice", email = "long2ice@gmail.com" },

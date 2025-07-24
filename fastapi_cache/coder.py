@@ -29,7 +29,7 @@ CONVERTERS: dict[str, Callable[[Any], Any]] = {
 }
 
 
-def dec_hook(type_: type[T], obj: Any) -> T:
+def dec_hook[T](type_: type[T], obj: Any) -> T:
     if is_subclass_safe(type_, BaseModel):
         if isinstance(obj, bytes):
             return type_.model_validate_json(obj)  # type: ignore[no-any-return, attr-defined]

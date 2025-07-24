@@ -88,7 +88,7 @@ class RedisBackend(Backend):
     def lock(self, key: str, timeout: int) -> "AbstractAsyncContextManager[Any]":
         lock_key = f"{key}::lock"
 
-        return Lock(self.redis_write, lock_key, timeout=timeout)
+        return Lock(self.redis_write, lock_key, timeout=timeout, raise_on_release_error=False)  # type: ignore[call-arg]
 
     async def _clear_by_keys_python(self, match: str) -> int:
         """Python implementation of DELETE_BY_KEYS_SCRIPT.

@@ -5,7 +5,6 @@ from functools import cached_property, partial, update_wrapper
 from inspect import Parameter, Signature, isawaitable, iscoroutinefunction, markcoroutinefunction
 from typing import (
     Any,
-    Generic,
     Literal,
     ParamSpec,
     TypeVar,
@@ -108,7 +107,7 @@ def _get_max_age(ttl: int | None) -> int:
     return ttl
 
 
-class Cached(Generic[P, R]):
+class Cached[**P, R]:
     def __init__(
         self,
         ctx: CacheCtxWithOptional,
@@ -396,4 +395,4 @@ def cache(
     if not isinstance(coder, UnsetType):
         ctx.coder = coder
 
-    return partial(Cached, ctx)  # type: ignore[return-value]
+    return partial(Cached, ctx)
