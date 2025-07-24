@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 This project uses [git-cliff](https://git-cliff.org/).
 
-## [unreleased]
+## [2.2.1] - 2025-07-24
+
+### 🐛 Bug Fixes
+
+- Ignore release lock errors in redis
+
+## [2.2.0] - 2025-05-01
 
 ### 🚀 Features
 
