@@ -5,20 +5,20 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import pendulum
+import redis.asyncio as redis
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from redis.asyncio.connection import ConnectionPool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-import redis.asyncio as redis
 from fastapi_cache import FastAPICache, get_cache_ctx
 from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache.coder import PickleCoder
 from fastapi_cache.decorator import cache
-from redis.asyncio.connection import ConnectionPool
 
 
 @asynccontextmanager
