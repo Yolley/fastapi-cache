@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 This project uses [git-cliff](https://git-cliff.org/).
 
+## [unreleased]
+
+### 🚀 Features
+
+- Reintroduce Python 3.11 support
+- Support decorating sync functions in type annotations (already supported by the implementation)
+
 ## [2.2.2] - 2025-11-26
 
 ### ⚙️ Miscellaneous Tasks
