@@ -1,12 +1,15 @@
+import inspect
 import logging
-from collections.abc import Awaitable, Callable, Generator
+from collections.abc import Awaitable, Callable, Coroutine, Generator
 from contextlib import AsyncExitStack, contextmanager
 from functools import cached_property, partial, update_wrapper
-from inspect import Parameter, Signature, isawaitable, iscoroutinefunction, markcoroutinefunction
+from inspect import Parameter, Signature, isawaitable, iscoroutinefunction
 from typing import (
     Any,
+    Generic,
     Literal,
     ParamSpec,
+    Protocol,
     TypeVar,
     cast,
     overload,
@@ -33,8 +36,23 @@ logger: logging.Logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 P = ParamSpec("P")
 R = TypeVar("R")
+F = TypeVar("F", bound=Callable[..., object])
 # According to [RFC 2616](https://www.ietf.org/rfc/rfc2616.txt)
 MAX_AGE_NEVER_EXPIRES = 31536000
+
+
+try:
+    markcoroutinefunction = inspect.markcoroutinefunction  # type: ignore[attr-defined]
+except AttributeError:
+
+    def markcoroutinefunction(func: F) -> F:
+        """Pseudo mark coroutine implementation for Python 3.11.
+
+        Does not work with `inspect`, only bypasses asyncio.iscoroutinefunction check."""
+        import asyncio.coroutines
+
+        func._is_coroutine = asyncio.coroutines._is_coroutine  # type: ignore[attr-defined]
+        return func
 
 
 def _augment_signature(signature: Signature, *extra: Parameter) -> Signature:
@@ -107,7 +125,7 @@ def _get_max_age(ttl: int | None) -> int:
     return ttl
 
 
-class Cached[**P, R]:
+class Cached(Generic[P, R]):
     def __init__(
         self,
         ctx: CacheCtxWithOptional,
@@ -342,6 +360,19 @@ class Cached[**P, R]:
         return result
 
 
+class CacheDecorator(Protocol):
+    """Cache decorator protocol that supports both sync and async functions, returns type is always async."""
+
+    @overload
+    def __call__(self, _func: Callable[P, Coroutine[Any, Any, R]]) -> Callable[P, Coroutine[Any, Any, R]]: ...
+    @overload
+    def __call__(self, _func: Callable[P, R]) -> Callable[P, Coroutine[Any, Any, R]]: ...
+    def __call__(
+        self,
+        _func: Callable[P, Coroutine[Any, Any, R]] | Callable[P, R],
+    ) -> Callable[P, Coroutine[Any, Any, R]]: ...
+
+
 def cache(
     expire: int | None | UnsetType = UNSET,
     coder: type[Coder] | UnsetType = UNSET,
@@ -351,7 +382,7 @@ def cache(
     lock_timeout: int = 60,
     bypass_cache_control: bool = False,
     injected_dependency_namespace: str = "__fastapi_cache",
-) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
+) -> CacheDecorator:
     """Cache-all function.
 
     Args:

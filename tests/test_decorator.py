@@ -1,12 +1,15 @@
 import asyncio
+import inspect
+import sys
 from unittest import mock
 
 import pendulum
+import pytest
 from fastapi.routing import serialize_response
 from httpx import AsyncClient
 
 from fastapi_cache import FastAPICache
-from fastapi_cache.decorator import MAX_AGE_NEVER_EXPIRES
+from fastapi_cache.decorator import MAX_AGE_NEVER_EXPIRES, cache
 
 
 async def test_datetime(client: AsyncClient) -> None:
@@ -172,5 +175,32 @@ async def test_ctx(client: AsyncClient) -> None:
     assert response.headers.get("cache-control") == f"max-age={MAX_AGE_NEVER_EXPIRES}"
 
 
-async def test_response_caching(client: AsyncClient) -> None:
-    pass
+async def test_coroutine_marker_when_using_asyncio(client: AsyncClient) -> None:
+    """Test whether the coroutine marker is correctly set."""
+
+    @cache()
+    async def call_async() -> int:
+        return 1 + 1
+
+    @cache()
+    def call_sync() -> int:
+        return 1 + 1
+
+    assert asyncio.iscoroutinefunction(call_async)
+    assert asyncio.iscoroutinefunction(call_sync)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="Works only on 3.12+")
+async def test_coroutine_marker_when_using_inspect(client: AsyncClient) -> None:
+    """Test whether the coroutine marker is correctly set."""
+
+    @cache()
+    async def call_async() -> int:
+        return 1 + 1
+
+    @cache()
+    def call_sync() -> int:
+        return 1 + 1
+
+    assert inspect.iscoroutinefunction(call_async)
+    assert inspect.iscoroutinefunction(call_sync)
