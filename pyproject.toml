@@ -6,7 +6,7 @@ authors = [
     { name = "long2ice", email = "long2ice@gmail.com" },
     { name = "Yolley", email = "comingreal@gmail.com" },
 ]
-requires-python = "~=3.12"
+requires-python = ">=3.11"
 readme = "README.md"
 license = "Apache-2.0"
 keywords = [
@@ -87,7 +87,7 @@ build-backend = "hatchling.build"
 
 [tool.mypy]
 files = ["."]
-python_version = "3.12"
+python_version = "3.11"
 # equivalent of --strict
 warn_unused_configs = true
 disallow_any_generics = true
@@ -110,14 +110,14 @@ ignore_errors = true
 
 [tool.pyright]
 strict = ["fastapi_cache", "tests"]
-pythonVersion = "3.12"
+pythonVersion = "3.11"
 
 [tool.pytest.ini_options]
 addopts = "-p no:warnings"
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [

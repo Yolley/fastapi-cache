@@ -39,7 +39,7 @@ jobs:
       - lint
     strategy:
       matrix:
-        python: [ "3.12", "3.13" ]
+        python: [ "3.11", "3.12", "3.13" ]
       fail-fast: false
 
     name: "Test on Python ${{ matrix.python }}"
